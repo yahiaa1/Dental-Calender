@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- Centered tooth silhouette (safe zone 66dp x 66dp within 108dp canvas) -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M54,28 C43,28 35,32 35,42 C35,48 37,55 39,63 C41,71 44,80 47,80 C50,80 51,73 54,67 C57,73 58,80 61,80 C64,80 67,71 69,63 C71,55 73,48 73,42 C73,32 65,28 54,28 Z" />
+    <!-- Medical Plus Symbol inside tooth -->
+    <path
+        android:fillColor="#004D40"
+        android:pathData="M51,40 L57,40 L57,46 L63,46 L63,52 L57,52 L57,58 L51,58 L51,52 L45,52 L45,46 L51,46 Z" />
+</vector>

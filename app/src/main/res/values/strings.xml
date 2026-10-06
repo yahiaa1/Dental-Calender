@@ -1,0 +1,4 @@
+<resources>
+    <string name="app_name">عيادة الأسنان</string>
+    <string name="widget_description">عرض مواعيد عيادة الأسنان لليوم الحالي على الشاشة الرئيسية</string>
+</resources>

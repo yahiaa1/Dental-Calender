@@ -1,0 +1,92 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/widget_item_container"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="horizontal"
+    android:gravity="center_vertical"
+    android:background="@drawable/widget_item_bg"
+    android:padding="8dp">
+
+    <!-- Color indicator strip -->
+    <View
+        android:id="@+id/widget_item_indicator"
+        android:layout_width="4dp"
+        android:layout_height="36dp"
+        android:layout_marginEnd="8dp"
+        android:background="@drawable/widget_indicator_bg" />
+
+    <!-- Details Column -->
+    <LinearLayout
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_weight="1"
+        android:orientation="vertical">
+
+        <!-- Patient Name & Procedure -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center_vertical">
+
+            <TextView
+                android:id="@+id/widget_item_patient_name"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="اسم المريض"
+                android:textColor="#263238"
+                android:textSize="12sp"
+                android:textStyle="bold"
+                android:singleLine="true" />
+
+            <TextView
+                android:id="@+id/widget_item_procedure"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="6dp"
+                android:text="• كشف"
+                android:textColor="#00897B"
+                android:textSize="11sp"
+                android:textStyle="bold"
+                android:singleLine="true" />
+        </LinearLayout>
+
+        <!-- Booking Employee name -->
+        <TextView
+            android:id="@+id/widget_item_booked_by"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="2dp"
+            android:text="👤 حجز: د. محمد (أدمن)"
+            android:textColor="#78909C"
+            android:textSize="10sp"
+            android:singleLine="true" />
+    </LinearLayout>
+
+    <!-- Time & Status Column -->
+    <LinearLayout
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:gravity="end">
+
+        <TextView
+            android:id="@+id/widget_item_time"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="10:00 ص"
+            android:textColor="#00695C"
+            android:textSize="11sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:id="@+id/widget_item_status"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="2dp"
+            android:text="مجدول"
+            android:textColor="#546E7A"
+            android:textSize="9sp" />
+    </LinearLayout>
+</LinearLayout>

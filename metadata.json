@@ -1,0 +1,6 @@
+{
+  "name": "عيادة الأسنان",
+  "description": "تطبيق متكامل لإدارة وجدولة مواعيد عيادة الأسنان مع دعم التقويم اليومي والأسبوعي والشهري وتكامل الواتساب وتصنيف المرضى وتخصيص ألوان الإجراءات",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
