@@ -72,6 +72,13 @@ data class DragMoveState(
     val dragOffsetY: Float = 0f
 )
 
+data class TimeSlotSelection(
+    val date: LocalDate,
+    val anchorMins: Int,
+    val startMins: Int,
+    val endMins: Int
+)
+
 @Composable
 fun ProportionalTimelineView(
     centerDate: LocalDate,
@@ -242,7 +249,7 @@ fun ProportionalTimelineView(
             }
 
             Text(
-                text = "💡 اسحب مطولاً على أي موعد لنقله لأي يوم أو ساعة",
+                text = "💡 اسحب بإصبعك لتحديد وقت الحجز • اسحب مطولاً على موعد لنقله",
                 fontSize = 10.sp,
                 color = ClinicPrimary,
                 fontWeight = FontWeight.Medium
@@ -538,15 +545,64 @@ private fun DayColumnSlot(
         layoutOverlappingAppointments(appointments, workStartHour)
     }
 
+    var activeSlotSelection by remember { mutableStateOf<TimeSlotSelection?>(null) }
+
     BoxWithConstraints(
         modifier = Modifier
             .fillMaxWidth()
             .height(totalHeightDp)
-            // Tap on empty slot to add appointment
+            // 1. Slide with finger on empty timeline to select booking time range
+            .pointerInput(date, hourHeightDp) {
+                detectDragGesturesAfterLongPress(
+                    onDragStart = { offset ->
+                        if (activeDragState == null) {
+                            val hourHeightPx = hourHeightDp.dp.toPx()
+                            val tappedMins = ((offset.y / hourHeightPx) * 60).roundToInt()
+                            val snappedStart = ((tappedMins / 15) * 15).coerceIn(0, totalHours * 60 - 15)
+                            activeSlotSelection = TimeSlotSelection(
+                                date = date,
+                                anchorMins = snappedStart,
+                                startMins = snappedStart,
+                                endMins = (snappedStart + 30).coerceAtMost(totalHours * 60)
+                            )
+                        }
+                    },
+                    onDrag = { change, dragAmount ->
+                        change.consume()
+                        activeSlotSelection?.let { sel ->
+                            val hourHeightPx = hourHeightDp.dp.toPx()
+                            val curMins = ((change.position.y / hourHeightPx) * 60).roundToInt()
+                            val snappedCur = ((curMins + 7) / 15 * 15).coerceIn(0, totalHours * 60)
+                            val sMins = minOf(sel.anchorMins, snappedCur)
+                            val eMins = maxOf(sel.anchorMins + 15, snappedCur)
+                            activeSlotSelection = sel.copy(
+                                startMins = sMins,
+                                endMins = eMins
+                            )
+                        }
+                    },
+                    onDragEnd = {
+                        activeSlotSelection?.let { sel ->
+                            val startHour = (workStartHour + sel.startMins / 60).coerceIn(workStartHour, workEndHour - 1)
+                            val startMin = sel.startMins % 60
+                            val endHour = (workStartHour + sel.endMins / 60).coerceIn(startHour, workEndHour)
+                            val endMin = sel.endMins % 60
+                            val sTime = String.format("%02d:%02d", startHour, startMin)
+                            val eTime = String.format("%02d:%02d", endHour, endMin)
+                            activeSlotSelection = null
+                            onTimeSlotSelected(date, sTime, eTime)
+                        }
+                    },
+                    onDragCancel = {
+                        activeSlotSelection = null
+                    }
+                )
+            }
+            // 2. Tap on empty slot to add default 45 min appointment
             .pointerInput(date, hourHeightDp) {
                 detectTapGestures(
                     onTap = { offset ->
-                        if (activeDragState == null) {
+                        if (activeDragState == null && activeSlotSelection == null) {
                             val hourHeightPx = hourHeightDp.dp.toPx()
                             val tappedMins = ((offset.y / hourHeightPx) * 60).roundToInt()
                             val snappedStartMins = (tappedMins / 30) * 30
@@ -620,6 +676,113 @@ private fun DayColumnSlot(
                         color = Color.White
                     )
                 }
+            }
+        }
+
+        // Live Selection Box when sliding with finger to book time
+        if (activeSlotSelection != null && activeSlotSelection!!.date == date) {
+            val sel = activeSlotSelection!!
+            val selTopDp = (sel.startMins / 60f * hourHeightDp).dp
+            val selHeightDp = max(32f, (sel.endMins - sel.startMins) / 60f * hourHeightDp).dp
+            val sHour = (workStartHour + sel.startMins / 60).coerceIn(workStartHour, workEndHour - 1)
+            val sMin = sel.startMins % 60
+            val eHour = (workStartHour + sel.endMins / 60).coerceIn(sHour, workEndHour)
+            val eMin = sel.endMins % 60
+            val start12 = TimeFormatter.format12Hour(String.format("%02d:%02d", sHour, sMin))
+            val end12 = TimeFormatter.format12Hour(String.format("%02d:%02d", eHour, eMin))
+            val durationMins = sel.endMins - sel.startMins
+            val durText = if (durationMins >= 60) {
+                val h = durationMins / 60
+                val m = durationMins % 60
+                if (m > 0) "$h س و $m د" else "$h ساعة"
+            } else {
+                "$durationMins دقيقة"
+            }
+
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 2.dp)
+                    .offset(y = selTopDp)
+                    .height(selHeightDp)
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(ClinicPrimary.copy(alpha = 0.25f))
+                    .border(2.dp, ClinicPrimary, RoundedCornerShape(8.dp))
+                    .zIndex(8f)
+            ) {
+                // Top handle indicator
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.TopCenter)
+                        .padding(top = 2.dp)
+                        .width(28.dp)
+                        .height(3.dp)
+                        .clip(RoundedCornerShape(2.dp))
+                        .background(ClinicPrimary)
+                )
+
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(horizontal = 6.dp, vertical = 4.dp),
+                    verticalArrangement = Arrangement.SpaceBetween
+                ) {
+                    // Start time badge
+                    Row(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(4.dp))
+                            .background(ClinicPrimary)
+                            .padding(horizontal = 5.dp, vertical = 1.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "من $start12",
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Color.White
+                        )
+                    }
+
+                    // Duration center label
+                    if (selHeightDp >= 44.dp) {
+                        Text(
+                            text = "⏱️ $durText (اسحب لتعديل الوقت)",
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = ClinicPrimary,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+
+                    // End time badge
+                    Row(
+                        modifier = Modifier
+                            .align(Alignment.End)
+                            .clip(RoundedCornerShape(4.dp))
+                            .background(Color(0xFF004D40))
+                            .padding(horizontal = 5.dp, vertical = 1.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "إلى $end12",
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Color.White
+                        )
+                    }
+                }
+
+                // Bottom handle indicator
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.BottomCenter)
+                        .padding(bottom = 2.dp)
+                        .width(28.dp)
+                        .height(3.dp)
+                        .clip(RoundedCornerShape(2.dp))
+                        .background(ClinicPrimary)
+                )
             }
         }
 

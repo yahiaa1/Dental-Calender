@@ -3,10 +3,12 @@ package com.example.ui.screens.appointment
 import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import kotlin.math.roundToInt
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -598,6 +600,85 @@ fun AddEditAppointmentScreen(
                             )
                         }
                     }
+                }
+            }
+
+            // Interactive Finger Slider for Time Selection
+            val currentStartMinutes = remember(startTime) {
+                try {
+                    val parts = startTime.split(":")
+                    parts[0].toInt() * 60 + parts[1].toInt()
+                } catch (e: Exception) {
+                    600 // 10:00
+                }
+            }
+            val currentDurationMinutes = remember(startTime, endTime) {
+                try {
+                    val sParts = startTime.split(":")
+                    val eParts = endTime.split(":")
+                    val s = sParts[0].toInt() * 60 + sParts[1].toInt()
+                    val e = eParts[0].toInt() * 60 + eParts[1].toInt()
+                    if (e > s) e - s else 45
+                } catch (e: Exception) {
+                    45
+                }
+            }
+
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(Color.White)
+                    .border(1.dp, Color(0xFFCFD8DC), RoundedCornerShape(10.dp))
+                    .padding(horizontal = 12.dp, vertical = 8.dp)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "👆 اسحب بالإصبع لضبط وقت الموعد سريعاً",
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = ClinicPrimary
+                    )
+                    Text(
+                        text = "${TimeFormatter.format12Hour(startTime)} - ${TimeFormatter.format12Hour(endTime)}",
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color(0xFF263238)
+                    )
+                }
+
+                Slider(
+                    value = currentStartMinutes.toFloat().coerceIn(8f * 60f, 23f * 60f),
+                    onValueChange = { newMinsFloat ->
+                        val snapped = ((newMinsFloat / 15f).roundToInt() * 15).coerceIn(8 * 60, 23 * 60)
+                        val h = snapped / 60
+                        val m = snapped % 60
+                        startTime = String.format("%02d:%02d", h, m)
+                        val endTotal = (snapped + currentDurationMinutes).coerceAtMost(24 * 60 - 1)
+                        endTime = String.format("%02d:%02d", endTotal / 60, endTotal % 60)
+                    },
+                    valueRange = (8f * 60f)..(23f * 60f),
+                    steps = ((23 - 8) * 4) - 1,
+                    colors = SliderDefaults.colors(
+                        thumbColor = ClinicPrimary,
+                        activeTrackColor = ClinicPrimary,
+                        inactiveTrackColor = Color(0xFFE0E0E0)
+                    ),
+                    modifier = Modifier.fillMaxWidth().height(28.dp)
+                )
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Text("08:00 ص", fontSize = 10.sp, color = Color(0xFF90A4AE))
+                    Text("01:00 م", fontSize = 10.sp, color = Color(0xFF90A4AE))
+                    Text("06:00 م", fontSize = 10.sp, color = Color(0xFF90A4AE))
+                    Text("11:00 م", fontSize = 10.sp, color = Color(0xFF90A4AE))
                 }
             }
 
