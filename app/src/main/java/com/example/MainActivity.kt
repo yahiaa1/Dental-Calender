@@ -128,7 +128,7 @@ fun DentalClinicApp(
         LoginScreen(
             onLoginSuccess = { user ->
                 viewModel.selectCurrentUser(user)
-                viewModel.isAuthenticated.value = true
+                viewModel.setAuthenticated(true)
             },
             onAttemptLogin = { u, p ->
                 viewModel.attemptLogin(u, p)

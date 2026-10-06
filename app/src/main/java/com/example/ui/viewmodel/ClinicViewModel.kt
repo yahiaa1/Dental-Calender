@@ -57,9 +57,10 @@ data class FilterState(
 class ClinicViewModel(application: Application) : AndroidViewModel(application) {
 
     private val repository: ClinicRepository
+    private val authPrefs = application.getSharedPreferences("clinic_auth_prefs", Context.MODE_PRIVATE)
 
-    // User Authentication State
-    val isAuthenticated = MutableStateFlow(false)
+    // User Authentication State: Persisted session so app remains open until explicit logout
+    val isAuthenticated = MutableStateFlow(authPrefs.getBoolean("is_logged_in", true))
 
     init {
         val database = AppDatabase.getDatabase(application, viewModelScope)
@@ -95,6 +96,15 @@ class ClinicViewModel(application: Application) : AndroidViewModel(application) 
             val defaultNurse = repository.getUserByUsername("nurse")
             if (defaultNurse != null && (defaultNurse.name.contains("مساعد تمريض") || defaultNurse.name.contains("سارة"))) {
                 repository.deleteUser(defaultNurse)
+            }
+
+            // Restore saved logged-in user if available
+            val savedUsername = authPrefs.getString("logged_in_username", null)
+            if (!savedUsername.isNullOrBlank()) {
+                val user = repository.getUserByUsername(savedUsername)
+                if (user != null) {
+                    currentUser.value = user
+                }
             }
         }
 
@@ -224,6 +234,10 @@ class ClinicViewModel(application: Application) : AndroidViewModel(application) 
             }
             currentUser.value = admin
             isAuthenticated.value = true
+            authPrefs.edit()
+                .putBoolean("is_logged_in", true)
+                .putString("logged_in_username", admin.username)
+                .apply()
             return admin
         }
 
@@ -232,6 +246,10 @@ class ClinicViewModel(application: Application) : AndroidViewModel(application) 
         if (user != null && user.password == cleanPass) {
             currentUser.value = user
             isAuthenticated.value = true
+            authPrefs.edit()
+                .putBoolean("is_logged_in", true)
+                .putString("logged_in_username", user.username)
+                .apply()
             return user
         }
         return null
@@ -239,6 +257,10 @@ class ClinicViewModel(application: Application) : AndroidViewModel(application) 
 
     fun logout() {
         isAuthenticated.value = false
+        authPrefs.edit()
+            .putBoolean("is_logged_in", false)
+            .remove("logged_in_username")
+            .apply()
         currentScreen.value = ClinicScreen.MainCalendar
         bottomNavIndex.value = 0
     }
@@ -267,6 +289,16 @@ class ClinicViewModel(application: Application) : AndroidViewModel(application) 
 
     fun selectCurrentUser(user: UserEntity) {
         currentUser.value = user
+        authPrefs.edit()
+            .putString("logged_in_username", user.username)
+            .apply()
+    }
+
+    fun setAuthenticated(authenticated: Boolean) {
+        isAuthenticated.value = authenticated
+        authPrefs.edit()
+            .putBoolean("is_logged_in", authenticated)
+            .apply()
     }
 
     fun addUser(user: UserEntity) {
