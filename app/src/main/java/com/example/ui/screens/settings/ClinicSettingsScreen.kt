@@ -26,11 +26,16 @@ import androidx.compose.ui.unit.sp
 import com.example.ui.theme.ClinicBackground
 import com.example.ui.theme.ClinicPrimary
 import com.example.ui.theme.WhatsAppGreen
+import com.example.utils.DateUtils
 
 @Composable
 fun ClinicSettingsScreen(
     hideCancelled: Boolean,
     onToggleHideCancelled: () -> Unit,
+    dayOff: java.time.DayOfWeek? = java.time.DayOfWeek.FRIDAY,
+    hideDayOff: Boolean = false,
+    onSelectDayOff: (java.time.DayOfWeek?) -> Unit = {},
+    onToggleHideDayOff: () -> Unit = {},
     onOpenProcedureColors: () -> Unit,
     onOpenWhatsAppTemplates: () -> Unit,
     onOpenClassificationGuide: () -> Unit,
@@ -189,6 +194,135 @@ fun ClinicSettingsScreen(
                         onCheckedChange = { onToggleHideCancelled() },
                         colors = SwitchDefaults.colors(checkedThumbColor = ClinicPrimary, checkedTrackColor = ClinicPrimary.copy(alpha = 0.5f))
                     )
+                }
+            }
+
+            // Weekly Day Off Settings Card (تحديد يوم الإجازة وإخفاؤه أو إظهاره)
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(12.dp),
+                colors = CardDefaults.cardColors(containerColor = Color.White),
+                elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Row(modifier = Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically) {
+                            Box(
+                                modifier = Modifier
+                                    .size(38.dp)
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .background(Color(0xFFFFEBEE)),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.EventBusy,
+                                    contentDescription = null,
+                                    tint = Color(0xFFD32F2F),
+                                    modifier = Modifier.size(20.dp)
+                                )
+                            }
+                            Spacer(modifier = Modifier.width(12.dp))
+                            Column {
+                                Text(
+                                    text = "يوم الإجازة الأسبوعية للعيادة",
+                                    fontSize = 14.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color(0xFF263238)
+                                )
+                                Text(
+                                    text = if (dayOff != null) "اليوم المحدد: ${DateUtils.getArabicDayName(dayOff)}" else "لا توجد إجازة أسبوعية",
+                                    fontSize = 11.sp,
+                                    color = Color(0xFF78909C)
+                                )
+                            }
+                        }
+
+                        // Hide/Show Toggle Switch
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(
+                                text = if (hideDayOff) "مخفي" else "ظاهر",
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = if (hideDayOff) Color(0xFFE53935) else ClinicPrimary
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Switch(
+                                checked = hideDayOff,
+                                onCheckedChange = { onToggleHideDayOff() },
+                                colors = SwitchDefaults.colors(
+                                    checkedThumbColor = Color(0xFFE53935),
+                                    checkedTrackColor = Color(0xFFFFCDD2)
+                                )
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Text(
+                        text = "اختر يوم الإجازة الرسمية للعيادة (الأسبوع يبدأ من السبت حتى الجمعة):",
+                        fontSize = 12.sp,
+                        color = Color(0xFF546E7A)
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    // Day of week selection chips (Saturday to Friday)
+                    val daysList = listOf(
+                        Pair(java.time.DayOfWeek.SATURDAY, "السبت"),
+                        Pair(java.time.DayOfWeek.SUNDAY, "الأحد"),
+                        Pair(java.time.DayOfWeek.MONDAY, "الاثنين"),
+                        Pair(java.time.DayOfWeek.TUESDAY, "الثلاثاء"),
+                        Pair(java.time.DayOfWeek.WEDNESDAY, "الأربعاء"),
+                        Pair(java.time.DayOfWeek.THURSDAY, "الخميس"),
+                        Pair(java.time.DayOfWeek.FRIDAY, "الجمعة"),
+                        Pair(null, "بدون إجازة")
+                    )
+
+                    daysList.chunked(4).forEach { rowDays ->
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            rowDays.forEach { (dow, name) ->
+                                val isSelected = dow == dayOff
+                                FilterChip(
+                                    selected = isSelected,
+                                    onClick = { onSelectDayOff(dow) },
+                                    modifier = Modifier.weight(1f),
+                                    label = {
+                                        Text(
+                                            text = name,
+                                            fontSize = 10.sp,
+                                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                                            textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                                            modifier = Modifier.fillMaxWidth()
+                                        )
+                                    },
+                                    colors = FilterChipDefaults.filterChipColors(
+                                        selectedContainerColor = if (dow == null) Color(0xFFECEFF1) else Color(0xFFFFEBEE),
+                                        selectedLabelColor = if (dow == null) Color(0xFF37474F) else Color(0xFFC62828)
+                                    )
+                                )
+                            }
+                        }
+                        Spacer(modifier = Modifier.height(4.dp))
+                    }
+
+                    if (hideDayOff && dayOff != null) {
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(
+                            text = "💡 يتم إخفاء يوم ${DateUtils.getArabicDayName(dayOff)} حالياً من العرض الأسبوعي في التقويم.",
+                            fontSize = 11.sp,
+                            color = Color(0xFFE65100)
+                        )
+                    }
                 }
             }
 

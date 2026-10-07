@@ -136,6 +136,34 @@ class ClinicViewModel(application: Application) : AndroidViewModel(application) 
     // Option to hide cancelled appointments from calendar view
     val hideCancelledFromCalendar = MutableStateFlow(true)
 
+    private val settingsPrefs = application.getSharedPreferences("clinic_settings_prefs", Context.MODE_PRIVATE)
+
+    // Day Off configuration: Default is FRIDAY
+    val dayOff = MutableStateFlow<java.time.DayOfWeek?>(
+        settingsPrefs.getString("day_off", "FRIDAY")?.let {
+            if (it == "NONE") null else try { java.time.DayOfWeek.valueOf(it) } catch (e: Exception) { java.time.DayOfWeek.FRIDAY }
+        } ?: java.time.DayOfWeek.FRIDAY
+    )
+
+    // Option to hide/show the day off from calendar view
+    val hideDayOff = MutableStateFlow(settingsPrefs.getBoolean("hide_day_off", false))
+
+    fun setDayOff(day: java.time.DayOfWeek?) {
+        dayOff.value = day
+        settingsPrefs.edit().putString("day_off", day?.name ?: "NONE").apply()
+    }
+
+    fun toggleHideDayOff() {
+        val next = !hideDayOff.value
+        hideDayOff.value = next
+        settingsPrefs.edit().putBoolean("hide_day_off", next).apply()
+    }
+
+    fun setHideDayOff(hide: Boolean) {
+        hideDayOff.value = hide
+        settingsPrefs.edit().putBoolean("hide_day_off", hide).apply()
+    }
+
     // Reports selected date
     val reportsSelectedDate = MutableStateFlow(LocalDate.now())
 

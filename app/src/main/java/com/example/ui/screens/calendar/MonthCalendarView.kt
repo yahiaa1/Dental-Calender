@@ -31,10 +31,19 @@ fun MonthCalendarView(
     selectedDate: LocalDate,
     appointmentDots: Map<String, List<AppointmentStatus>>,
     onDateSelected: (LocalDate) -> Unit,
+    dayOff: java.time.DayOfWeek? = java.time.DayOfWeek.FRIDAY,
     modifier: Modifier = Modifier
 ) {
     val daysGrid = DateUtils.getMonthDaysGrid(selectedDate, selectedDate)
-    val dayNames = listOf("أحد", "اثنين", "ثلاثاء", "أربعاء", "خميس", "جمعة", "سبت")
+    val dayNames = listOf(
+        Pair("سبت", java.time.DayOfWeek.SATURDAY),
+        Pair("أحد", java.time.DayOfWeek.SUNDAY),
+        Pair("اثنين", java.time.DayOfWeek.MONDAY),
+        Pair("ثلاثاء", java.time.DayOfWeek.TUESDAY),
+        Pair("أربعاء", java.time.DayOfWeek.WEDNESDAY),
+        Pair("خميس", java.time.DayOfWeek.THURSDAY),
+        Pair("جمعة", java.time.DayOfWeek.FRIDAY)
+    )
 
     Column(
         modifier = modifier
@@ -80,7 +89,7 @@ fun MonthCalendarView(
             }
         }
 
-        // Days of week header row
+        // Days of week header row (Saturday -> Friday)
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -88,17 +97,28 @@ fun MonthCalendarView(
                 .padding(vertical = 8.dp),
             horizontalArrangement = Arrangement.SpaceAround
         ) {
-            dayNames.forEach { name ->
+            dayNames.forEach { (name, dow) ->
+                val isDayOff = dow == dayOff
                 Box(
                     modifier = Modifier.width(42.dp),
                     contentAlignment = Alignment.Center
                 ) {
-                    Text(
-                        text = name,
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        color = Color(0xFF78909C)
-                    )
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text(
+                            text = name,
+                            fontSize = 12.sp,
+                            fontWeight = if (isDayOff) FontWeight.Bold else FontWeight.SemiBold,
+                            color = if (isDayOff) Color(0xFFE53935) else Color(0xFF78909C)
+                        )
+                        if (isDayOff) {
+                            Text(
+                                text = "إجازة",
+                                fontSize = 9.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color(0xFFE53935)
+                            )
+                        }
+                    }
                 }
             }
         }
@@ -120,6 +140,7 @@ fun MonthCalendarView(
                 MonthDayCell(
                     cell = cell,
                     statuses = statuses,
+                    isDayOff = cell.date.dayOfWeek == dayOff,
                     onClick = { onDateSelected(cell.date) }
                 )
             }
@@ -127,7 +148,7 @@ fun MonthCalendarView(
 
         Spacer(modifier = Modifier.weight(1f))
 
-        // Status Legend at bottom matching screenshot
+        // Status Legend at bottom matching 6 statuses
         Surface(
             modifier = Modifier
                 .fillMaxWidth()
@@ -143,14 +164,15 @@ fun MonthCalendarView(
                 ) {
                     LegendItem(color = StatusCompleted, label = "مكتمل")
                     LegendItem(color = StatusInTreatment, label = "جار العلاج")
-                    LegendItem(color = StatusScheduled, label = "مجدول")
+                    LegendItem(color = StatusConfirmed, label = "مؤكد")
                 }
                 Spacer(modifier = Modifier.height(8.dp))
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceAround
                 ) {
-                    LegendItem(color = StatusDelayed, label = "متأخر")
+                    LegendItem(color = StatusUnconfirmed, label = "لم يتم التأكيد")
+                    LegendItem(color = StatusCancelled, label = "ملغي")
                     LegendItem(color = StatusNoShow, label = "لم يحضر")
                 }
             }
@@ -162,6 +184,7 @@ fun MonthCalendarView(
 private fun MonthDayCell(
     cell: DateUtils.MonthCalendarDay,
     statuses: List<AppointmentStatus>,
+    isDayOff: Boolean = false,
     onClick: () -> Unit
 ) {
     Column(
@@ -169,6 +192,7 @@ private fun MonthDayCell(
             .height(58.dp)
             .padding(2.dp)
             .clip(RoundedCornerShape(8.dp))
+            .background(if (isDayOff && !cell.isSelected && cell.isCurrentMonth) Color(0xFFFFF8F7) else Color.Transparent)
             .clickable(onClick = onClick)
             .testTag("month_day_${cell.date}"),
         horizontalAlignment = Alignment.CenterHorizontally,
@@ -184,6 +208,7 @@ private fun MonthDayCell(
             val textColor = when {
                 cell.isSelected -> Color.White
                 !cell.isCurrentMonth -> Color(0xFFCFD8DC)
+                isDayOff -> Color(0xFFD32F2F)
                 else -> Color(0xFF263238)
             }
             Text(

@@ -91,6 +91,8 @@ fun DentalClinicApp(
     val workEndHour by viewModel.workEndHour.collectAsStateWithLifecycle()
     val hourHeightDp by viewModel.hourHeightDp.collectAsStateWithLifecycle()
     val hideCancelled by viewModel.hideCancelledFromCalendar.collectAsStateWithLifecycle()
+    val dayOff by viewModel.dayOff.collectAsStateWithLifecycle()
+    val hideDayOff by viewModel.hideDayOff.collectAsStateWithLifecycle()
     val reportsSelectedDate by viewModel.reportsSelectedDate.collectAsStateWithLifecycle()
 
     val isFirebaseSyncing by viewModel.isFirebaseSyncing.collectAsStateWithLifecycle()
@@ -203,9 +205,12 @@ fun DentalClinicApp(
                         workEndHour = workEndHour,
                         hourHeightDp = hourHeightDp,
                         hideCancelled = hideCancelled,
+                        hideDayOff = hideDayOff,
+                        dayOff = dayOff,
                         currentUser = currentUser,
                         onLogout = { viewModel.logout() },
                         onToggleHideCancelled = { viewModel.toggleHideCancelled() },
+                        onToggleHideDayOff = { viewModel.toggleHideDayOff() },
                         onZoomChange = { viewModel.setZoom(it) },
                         onViewModeChange = { viewModel.setCalendarViewMode(it) },
                         onDateSelected = { viewModel.setSelectedDate(it) },
@@ -287,6 +292,10 @@ fun DentalClinicApp(
                         ClinicSettingsScreen(
                             hideCancelled = hideCancelled,
                             onToggleHideCancelled = { viewModel.toggleHideCancelled() },
+                            dayOff = dayOff,
+                            hideDayOff = hideDayOff,
+                            onSelectDayOff = { viewModel.setDayOff(it) },
+                            onToggleHideDayOff = { viewModel.toggleHideDayOff() },
                             onOpenProcedureColors = { viewModel.navigateTo(ClinicScreen.ProcedureColors) },
                             onOpenWhatsAppTemplates = { viewModel.navigateTo(ClinicScreen.WhatsAppTemplates) },
                             onOpenClassificationGuide = { viewModel.navigateTo(ClinicScreen.PatientClassificationGuide()) },

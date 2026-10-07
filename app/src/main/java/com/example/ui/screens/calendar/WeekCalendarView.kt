@@ -38,9 +38,11 @@ fun WeekCalendarView(
     onDateSelected: (LocalDate) -> Unit,
     onAppointmentClick: (AppointmentEntity) -> Unit,
     onWhatsAppClick: (AppointmentEntity) -> Unit,
+    hideDayOff: Boolean = false,
+    dayOff: java.time.DayOfWeek? = java.time.DayOfWeek.FRIDAY,
     modifier: Modifier = Modifier
 ) {
-    val weekDays = DateUtils.getWeekDays(selectedDate)
+    val weekDays = DateUtils.getWeekDays(selectedDate, hideDayOff, dayOff)
 
     Column(modifier = modifier.fillMaxSize().background(ClinicBackground)) {
         // Month Selector Header: "< أغسطس 2026 >"

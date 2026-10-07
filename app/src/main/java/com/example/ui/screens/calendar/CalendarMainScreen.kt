@@ -41,9 +41,12 @@ fun CalendarMainScreen(
     workEndHour: Int,
     hourHeightDp: Float,
     hideCancelled: Boolean,
+    hideDayOff: Boolean = false,
+    dayOff: java.time.DayOfWeek? = java.time.DayOfWeek.FRIDAY,
     currentUser: com.example.data.model.UserEntity? = null,
     onLogout: (() -> Unit)? = null,
     onToggleHideCancelled: () -> Unit,
+    onToggleHideDayOff: (() -> Unit)? = null,
     onZoomChange: (Float) -> Unit,
     onViewModeChange: (CalendarViewMode) -> Unit,
     onDateSelected: (LocalDate) -> Unit,
@@ -222,6 +225,26 @@ fun CalendarMainScreen(
                             )
                         }
 
+                        // Hide/Show Day Off Toggle Icon
+                        if (onToggleHideDayOff != null) {
+                            val dayOffName = dayOff?.let { DateUtils.getArabicDayName(it) } ?: "الإجازة"
+                            IconButton(
+                                onClick = onToggleHideDayOff,
+                                modifier = Modifier
+                                    .size(34.dp)
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .background(if (hideDayOff) Color(0xFFFFEBEE) else Color(0xFFF5F7F7))
+                                    .testTag("toggle_hide_day_off_button")
+                            ) {
+                                Icon(
+                                    imageVector = if (hideDayOff) Icons.Default.EventBusy else Icons.Default.EventAvailable,
+                                    contentDescription = if (hideDayOff) "إظهار يوم $dayOffName" else "إخفاء يوم $dayOffName",
+                                    tint = if (hideDayOff) Color(0xFFC62828) else Color(0xFF546E7A),
+                                    modifier = Modifier.size(18.dp)
+                                )
+                            }
+                        }
+
                         // Filter Button
                         IconButton(
                             onClick = onOpenFilter,
@@ -273,7 +296,9 @@ fun CalendarMainScreen(
                         onTimeSlotSelected = onTimeSlotSelected,
                         onAppointmentMoved = onAppointmentMoved,
                         onZoomChange = onZoomChange,
-                        onDateChanged = onDateSelected
+                        onDateChanged = onDateSelected,
+                        hideDayOff = hideDayOff,
+                        dayOff = dayOff
                     )
                 }
 
@@ -291,7 +316,9 @@ fun CalendarMainScreen(
                         onTimeSlotSelected = onTimeSlotSelected,
                         onAppointmentMoved = onAppointmentMoved,
                         onZoomChange = onZoomChange,
-                        onDateChanged = onDateSelected
+                        onDateChanged = onDateSelected,
+                        hideDayOff = hideDayOff,
+                        dayOff = dayOff
                     )
                 }
 
@@ -308,7 +335,9 @@ fun CalendarMainScreen(
                         onTimeSlotSelected = onTimeSlotSelected,
                         onAppointmentMoved = onAppointmentMoved,
                         onZoomChange = onZoomChange,
-                        onDateChanged = onDateSelected
+                        onDateChanged = onDateSelected,
+                        hideDayOff = hideDayOff,
+                        dayOff = dayOff
                     )
                 }
 
@@ -316,6 +345,7 @@ fun CalendarMainScreen(
                     MonthCalendarView(
                         selectedDate = selectedDate,
                         appointmentDots = appointmentDots,
+                        dayOff = dayOff,
                         onDateSelected = { date ->
                             onDateSelected(date)
                             onViewModeChange(CalendarViewMode.DAY)

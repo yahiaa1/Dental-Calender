@@ -93,6 +93,8 @@ fun ProportionalTimelineView(
     onAppointmentMoved: ((appointment: AppointmentEntity, newDate: String, newStartTime: String, newEndTime: String) -> Unit)? = null,
     onZoomChange: (Float) -> Unit,
     onDateChanged: ((LocalDate) -> Unit)? = null,
+    hideDayOff: Boolean = false,
+    dayOff: java.time.DayOfWeek? = java.time.DayOfWeek.FRIDAY,
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
@@ -105,18 +107,26 @@ fun ProportionalTimelineView(
     )
     val totalHeightDp = (totalHours * animatedHourHeight).dp
 
-    // Anchor base date (fixed reference point for infinite paging)
-    val baseAnchorDate = remember { LocalDate.of(2026, 1, 1) }
+    // Anchor base date: 2026-01-03 is Saturday (Week starts Saturday -> Friday)
+    val baseAnchorDate = remember { LocalDate.of(2026, 1, 3) }
+
+    // Helper to calculate days diff aligned with week start (Saturday) if daysCount == 7
+    val getAlignedCenter = { target: LocalDate ->
+        if (daysCount == 7) {
+            val daysFromSat = (target.dayOfWeek.value + 1) % 7
+            target.minusDays(daysFromSat.toLong())
+        } else target
+    }
 
     // Infinite Horizontal Pager: 10,000 pages for continuous, endless swiping
     val pagerState = rememberPagerState(
-        initialPage = PAGER_BASE_INDEX + (ChronoUnit.DAYS.between(baseAnchorDate, centerDate) / daysCount).toInt(),
+        initialPage = PAGER_BASE_INDEX + (ChronoUnit.DAYS.between(baseAnchorDate, getAlignedCenter(centerDate)) / daysCount).toInt(),
         pageCount = { 10000 }
     )
 
     // Synchronize pager when centerDate changes externally
     LaunchedEffect(centerDate, daysCount) {
-        val daysDiff = ChronoUnit.DAYS.between(baseAnchorDate, centerDate)
+        val daysDiff = ChronoUnit.DAYS.between(baseAnchorDate, getAlignedCenter(centerDate))
         val expectedPage = (PAGER_BASE_INDEX + (daysDiff / daysCount)).toInt().coerceIn(0, 9999)
         if (pagerState.currentPage != expectedPage) {
             pagerState.animateScrollToPage(expectedPage)
@@ -385,8 +395,13 @@ fun ProportionalTimelineView(
             val pageOffset = (page - PAGER_BASE_INDEX).toLong()
             val pageStartDate = baseAnchorDate.plusDays(pageOffset * daysCount)
 
-            val datesInThisPage = remember(pageStartDate, daysCount) {
-                (0 until daysCount).map { pageStartDate.plusDays(it.toLong()) }
+            val datesInThisPage = remember(pageStartDate, daysCount, hideDayOff, dayOff) {
+                val allDays = (0 until daysCount).map { pageStartDate.plusDays(it.toLong()) }
+                if (daysCount == 7 && hideDayOff && dayOff != null) {
+                    allDays.filter { it.dayOfWeek != dayOff }
+                } else {
+                    allDays
+                }
             }
 
             Column(modifier = Modifier.fillMaxSize()) {
@@ -402,6 +417,7 @@ fun ProportionalTimelineView(
 
                     datesInThisPage.forEach { date ->
                         val isToday = date == LocalDate.now()
+                        val isDayOff = date.dayOfWeek == dayOff
                         Column(
                             modifier = Modifier
                                 .weight(1f)
@@ -409,24 +425,28 @@ fun ProportionalTimelineView(
                             horizontalAlignment = Alignment.CenterHorizontally
                         ) {
                             Text(
-                                text = DateUtils.getArabicDayShortName(date.dayOfWeek),
-                                fontSize = 11.sp,
-                                color = if (isToday) ClinicPrimary else Color(0xFF70757A),
-                                fontWeight = if (isToday) FontWeight.Bold else FontWeight.Medium
+                                text = DateUtils.getArabicDayShortName(date.dayOfWeek) + if (isDayOff) " (إجازة)" else "",
+                                fontSize = if (isDayOff) 10.sp else 11.sp,
+                                color = when {
+                                    isToday -> ClinicPrimary
+                                    isDayOff -> Color(0xFFE53935)
+                                    else -> Color(0xFF70757A)
+                                },
+                                fontWeight = if (isToday || isDayOff) FontWeight.Bold else FontWeight.Medium
                             )
                             Spacer(modifier = Modifier.height(2.dp))
                             Box(
                                 modifier = Modifier
                                     .size(28.dp)
                                     .clip(CircleShape)
-                                    .background(if (isToday) ClinicPrimary else Color.Transparent),
+                                    .background(if (isToday) ClinicPrimary else if (isDayOff) Color(0xFFFFEBEE) else Color.Transparent),
                                 contentAlignment = Alignment.Center
                             ) {
                                 Text(
                                     text = date.dayOfMonth.toString(),
                                     fontSize = 13.sp,
                                     fontWeight = FontWeight.Bold,
-                                    color = if (isToday) Color.White else Color(0xFF3C4043)
+                                    color = if (isToday) Color.White else if (isDayOff) Color(0xFFC62828) else Color(0xFF3C4043)
                                 )
                             }
                         }

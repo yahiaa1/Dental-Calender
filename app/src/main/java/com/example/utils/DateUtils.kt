@@ -96,12 +96,25 @@ object DateUtils {
     }
 
     /**
-     * Returns the 7 days of the week containing the given date, starting from Sunday.
+     * Returns the days of the week containing the given date, starting from Saturday to Friday.
+     * Optionally filters out the configured day off if hideDayOff is true.
      */
-    fun getWeekDays(centerDate: LocalDate): List<LocalDate> {
-        val daysFromSunday = (centerDate.dayOfWeek.value % 7) // Sunday=7->0, Monday=1, etc.
-        val sunday = centerDate.minusDays(daysFromSunday.toLong())
-        return (0..6).map { sunday.plusDays(it.toLong()) }
+    fun getWeekDays(
+        centerDate: LocalDate,
+        hideDayOff: Boolean = false,
+        dayOff: DayOfWeek? = DayOfWeek.FRIDAY
+    ): List<LocalDate> {
+        // Saturday = DayOfWeek.SATURDAY (value 6). (6 + 1) % 7 = 0
+        // Sunday = DayOfWeek.SUNDAY (value 7). (7 + 1) % 7 = 1
+        // Friday = DayOfWeek.FRIDAY (value 5). (5 + 1) % 7 = 6
+        val daysFromSaturday = (centerDate.dayOfWeek.value + 1) % 7
+        val saturday = centerDate.minusDays(daysFromSaturday.toLong())
+        val allDays = (0..6).map { saturday.plusDays(it.toLong()) }
+        return if (hideDayOff && dayOff != null) {
+            allDays.filter { it.dayOfWeek != dayOff }
+        } else {
+            allDays
+        }
     }
 
     data class MonthCalendarDay(
@@ -112,12 +125,13 @@ object DateUtils {
     )
 
     /**
-     * Generates a 35 or 42 grid of days for a monthly calendar view starting from Sunday
+     * Generates a 35 or 42 grid of days for a monthly calendar view starting from Saturday to Friday
      */
     fun getMonthDaysGrid(yearMonth: LocalDate, selectedDate: LocalDate): List<MonthCalendarDay> {
         val firstOfMonth = yearMonth.withDayOfMonth(1)
         val daysInMonth = yearMonth.lengthOfMonth()
-        val startDayOfWeek = firstOfMonth.dayOfWeek.value % 7 // 0 for Sunday, 1 for Monday...
+        // Saturday is index 0: (value + 1) % 7
+        val startDayOfWeek = (firstOfMonth.dayOfWeek.value + 1) % 7
 
         val list = mutableListOf<MonthCalendarDay>()
         val today = LocalDate.now()
