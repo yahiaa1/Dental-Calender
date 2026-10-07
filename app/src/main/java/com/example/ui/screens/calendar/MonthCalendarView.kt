@@ -32,10 +32,11 @@ fun MonthCalendarView(
     appointmentDots: Map<String, List<AppointmentStatus>>,
     onDateSelected: (LocalDate) -> Unit,
     dayOff: java.time.DayOfWeek? = java.time.DayOfWeek.FRIDAY,
+    hideDayOff: Boolean = false,
     modifier: Modifier = Modifier
 ) {
-    val daysGrid = DateUtils.getMonthDaysGrid(selectedDate, selectedDate)
-    val dayNames = listOf(
+    val daysGrid = DateUtils.getMonthDaysGrid(selectedDate, selectedDate, hideDayOff, dayOff)
+    val allDayNames = listOf(
         Pair("سبت", java.time.DayOfWeek.SATURDAY),
         Pair("أحد", java.time.DayOfWeek.SUNDAY),
         Pair("اثنين", java.time.DayOfWeek.MONDAY),
@@ -44,6 +45,11 @@ fun MonthCalendarView(
         Pair("خميس", java.time.DayOfWeek.THURSDAY),
         Pair("جمعة", java.time.DayOfWeek.FRIDAY)
     )
+    val dayNames = if (hideDayOff && dayOff != null) {
+        allDayNames.filter { it.second != dayOff }
+    } else {
+        allDayNames
+    }
 
     Column(
         modifier = modifier
@@ -89,7 +95,7 @@ fun MonthCalendarView(
             }
         }
 
-        // Days of week header row (Saturday -> Friday)
+        // Days of week header row (e.g. Saturday -> Thursday if Friday is hidden)
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -125,9 +131,9 @@ fun MonthCalendarView(
 
         HorizontalDivider(color = Color(0xFFEEEEEE), thickness = 1.dp)
 
-        // Month Days Grid (7 columns)
+        // Month Days Grid (6 or 7 columns)
         LazyVerticalGrid(
-            columns = GridCells.Fixed(7),
+            columns = GridCells.Fixed(dayNames.size),
             modifier = Modifier
                 .fillMaxWidth()
                 .background(Color.White)

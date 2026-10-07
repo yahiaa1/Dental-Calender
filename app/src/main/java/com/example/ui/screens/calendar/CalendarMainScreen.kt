@@ -120,7 +120,13 @@ fun CalendarMainScreen(
                                     CalendarViewMode.WEEK -> 7L
                                     CalendarViewMode.MONTH -> 30L
                                 }
-                                onDateSelected(selectedDate.minusDays(step))
+                                var prev = selectedDate.minusDays(step)
+                                if (hideDayOff && dayOff != null && (viewMode == CalendarViewMode.DAY || viewMode == CalendarViewMode.THREE_DAYS)) {
+                                    if (prev.dayOfWeek == dayOff) {
+                                        prev = prev.minusDays(1)
+                                    }
+                                }
+                                onDateSelected(prev)
                             },
                             modifier = Modifier.size(30.dp)
                         ) {
@@ -135,7 +141,13 @@ fun CalendarMainScreen(
                                     CalendarViewMode.WEEK -> 7L
                                     CalendarViewMode.MONTH -> 30L
                                 }
-                                onDateSelected(selectedDate.plusDays(step))
+                                var next = selectedDate.plusDays(step)
+                                if (hideDayOff && dayOff != null && (viewMode == CalendarViewMode.DAY || viewMode == CalendarViewMode.THREE_DAYS)) {
+                                    if (next.dayOfWeek == dayOff) {
+                                        next = next.plusDays(1)
+                                    }
+                                }
+                                onDateSelected(next)
                             },
                             modifier = Modifier.size(30.dp)
                         ) {
@@ -144,7 +156,15 @@ fun CalendarMainScreen(
 
                         // "اليوم" Jump button
                         TextButton(
-                            onClick = { onDateSelected(LocalDate.now()) },
+                            onClick = {
+                                val today = LocalDate.now()
+                                val target = if (hideDayOff && dayOff != null && today.dayOfWeek == dayOff) {
+                                    today.plusDays(1)
+                                } else {
+                                    today
+                                }
+                                onDateSelected(target)
+                            },
                             contentPadding = PaddingValues(horizontal = 6.dp, vertical = 2.dp)
                         ) {
                             Text("اليوم", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = ClinicPrimary)
@@ -346,6 +366,7 @@ fun CalendarMainScreen(
                         selectedDate = selectedDate,
                         appointmentDots = appointmentDots,
                         dayOff = dayOff,
+                        hideDayOff = hideDayOff,
                         onDateSelected = { date ->
                             onDateSelected(date)
                             onViewModeChange(CalendarViewMode.DAY)

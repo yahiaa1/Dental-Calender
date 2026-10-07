@@ -157,11 +157,17 @@ class ClinicViewModel(application: Application) : AndroidViewModel(application) 
         val next = !hideDayOff.value
         hideDayOff.value = next
         settingsPrefs.edit().putBoolean("hide_day_off", next).apply()
+        if (next && dayOff.value != null && selectedDate.value.dayOfWeek == dayOff.value) {
+            selectedDate.value = selectedDate.value.plusDays(1)
+        }
     }
 
     fun setHideDayOff(hide: Boolean) {
         hideDayOff.value = hide
         settingsPrefs.edit().putBoolean("hide_day_off", hide).apply()
+        if (hide && dayOff.value != null && selectedDate.value.dayOfWeek == dayOff.value) {
+            selectedDate.value = selectedDate.value.plusDays(1)
+        }
     }
 
     // Reports selected date
@@ -295,7 +301,12 @@ class ClinicViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     fun setSelectedDate(date: LocalDate) {
-        selectedDate.value = date
+        val adjusted = if (hideDayOff.value && dayOff.value != null && date.dayOfWeek == dayOff.value) {
+            date.plusDays(1)
+        } else {
+            date
+        }
+        selectedDate.value = adjusted
     }
 
     fun setCalendarViewMode(mode: CalendarViewMode) {

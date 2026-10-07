@@ -125,34 +125,92 @@ object DateUtils {
     )
 
     /**
-     * Generates a 35 or 42 grid of days for a monthly calendar view starting from Saturday to Friday
+     * Generates a grid of days for a monthly calendar view starting from Saturday.
+     * Optionally filters out the configured day off if hideDayOff is true.
      */
-    fun getMonthDaysGrid(yearMonth: LocalDate, selectedDate: LocalDate): List<MonthCalendarDay> {
+    fun getMonthDaysGrid(
+        yearMonth: LocalDate,
+        selectedDate: LocalDate,
+        hideDayOff: Boolean = false,
+        dayOff: DayOfWeek? = DayOfWeek.FRIDAY
+    ): List<MonthCalendarDay> {
+        val allWeekDays = listOf(
+            DayOfWeek.SATURDAY, DayOfWeek.SUNDAY, DayOfWeek.MONDAY,
+            DayOfWeek.TUESDAY, DayOfWeek.WEDNESDAY, DayOfWeek.THURSDAY, DayOfWeek.FRIDAY
+        )
+        val activeDays = if (hideDayOff && dayOff != null) {
+            allWeekDays.filter { it != dayOff }
+        } else {
+            allWeekDays
+        }
+        val numCols = activeDays.size // 6 if dayOff hidden, 7 otherwise
+
         val firstOfMonth = yearMonth.withDayOfMonth(1)
         val daysInMonth = yearMonth.lengthOfMonth()
-        // Saturday is index 0: (value + 1) % 7
-        val startDayOfWeek = (firstOfMonth.dayOfWeek.value + 1) % 7
-
-        val list = mutableListOf<MonthCalendarDay>()
         val today = LocalDate.now()
 
-        // Days from previous month
-        for (i in startDayOfWeek downTo 1) {
-            val date = firstOfMonth.minusDays(i.toLong())
-            list.add(MonthCalendarDay(date, isCurrentMonth = false, isSelected = date == selectedDate, isToday = date == today))
+        // Find the first active day on or after firstOfMonth
+        var firstActiveDate = firstOfMonth
+        while (hideDayOff && dayOff != null && firstActiveDate.dayOfWeek == dayOff) {
+            firstActiveDate = firstActiveDate.plusDays(1)
         }
 
-        // Days of current month
+        // Which column in activeDays does firstActiveDate belong to?
+        val startCol = activeDays.indexOf(firstActiveDate.dayOfWeek).coerceAtLeast(0)
+
+        val list = mutableListOf<MonthCalendarDay>()
+
+        // Preceding active days from previous month to fill the first row before startCol
+        var prevDate = firstActiveDate.minusDays(1)
+        val precedingList = mutableListOf<MonthCalendarDay>()
+        var countPrecedingNeeded = startCol
+        while (countPrecedingNeeded > 0) {
+            if (!hideDayOff || dayOff == null || prevDate.dayOfWeek != dayOff) {
+                precedingList.add(
+                    0,
+                    MonthCalendarDay(
+                        date = prevDate,
+                        isCurrentMonth = false,
+                        isSelected = prevDate == selectedDate,
+                        isToday = prevDate == today
+                    )
+                )
+                countPrecedingNeeded--
+            }
+            prevDate = prevDate.minusDays(1)
+        }
+        list.addAll(precedingList)
+
+        // Days of current month (excluding dayOff if hideDayOff is true)
         for (day in 1..daysInMonth) {
             val date = yearMonth.withDayOfMonth(day)
-            list.add(MonthCalendarDay(date, isCurrentMonth = true, isSelected = date == selectedDate, isToday = date == today))
+            if (!hideDayOff || dayOff == null || date.dayOfWeek != dayOff) {
+                list.add(
+                    MonthCalendarDay(
+                        date = date,
+                        isCurrentMonth = true,
+                        isSelected = date == selectedDate,
+                        isToday = date == today
+                    )
+                )
+            }
         }
 
-        // Trailing days from next month to fill grid
-        var nextMonthDate = yearMonth.withDayOfMonth(daysInMonth).plusDays(1)
-        while (list.size % 7 != 0 || list.size < 35) {
-            list.add(MonthCalendarDay(nextMonthDate, isCurrentMonth = false, isSelected = nextMonthDate == selectedDate, isToday = nextMonthDate == today))
-            nextMonthDate = nextMonthDate.plusDays(1)
+        // Trailing active days from next month to fill grid to full rows
+        val minCells = numCols * 5 // 30 cells for 6-day week, 35 for 7-day week
+        var nextDate = yearMonth.withDayOfMonth(daysInMonth).plusDays(1)
+        while (list.size % numCols != 0 || list.size < minCells) {
+            if (!hideDayOff || dayOff == null || nextDate.dayOfWeek != dayOff) {
+                list.add(
+                    MonthCalendarDay(
+                        date = nextDate,
+                        isCurrentMonth = false,
+                        isSelected = nextDate == selectedDate,
+                        isToday = nextDate == today
+                    )
+                )
+            }
+            nextDate = nextDate.plusDays(1)
         }
 
         return list

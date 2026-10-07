@@ -45,6 +45,7 @@ import com.example.ui.theme.ClinicPrimary
 import com.example.utils.DateUtils
 import com.example.utils.TimeFormatter
 import kotlinx.coroutines.launch
+import java.time.DayOfWeek
 import java.time.LocalDate
 import java.time.temporal.ChronoUnit
 import kotlin.math.max
@@ -110,24 +111,117 @@ fun ProportionalTimelineView(
     // Anchor base date: 2026-01-03 is Saturday (Week starts Saturday -> Friday)
     val baseAnchorDate = remember { LocalDate.of(2026, 1, 3) }
 
-    // Helper to calculate days diff aligned with week start (Saturday) if daysCount == 7
-    val getAlignedCenter = { target: LocalDate ->
-        if (daysCount == 7) {
-            val daysFromSat = (target.dayOfWeek.value + 1) % 7
-            target.minusDays(daysFromSat.toLong())
-        } else target
+    val allWeekDays = remember {
+        listOf(
+            DayOfWeek.SATURDAY, DayOfWeek.SUNDAY, DayOfWeek.MONDAY,
+            DayOfWeek.TUESDAY, DayOfWeek.WEDNESDAY, DayOfWeek.THURSDAY, DayOfWeek.FRIDAY
+        )
+    }
+
+    val activeWeekDays = remember(hideDayOff, dayOff) {
+        if (hideDayOff && dayOff != null) {
+            allWeekDays.filter { it != dayOff }
+        } else {
+            allWeekDays
+        }
+    }
+
+    // Helper to calculate the dates shown in a specific page
+    val getDatesForPage: (Int) -> List<LocalDate> = remember(daysCount, hideDayOff, dayOff, activeWeekDays) {
+        { page: Int ->
+            val pageOffset = (page - PAGER_BASE_INDEX).toLong()
+            when (daysCount) {
+                7 -> {
+                    val weekOffset = pageOffset
+                    val weekSaturday = baseAnchorDate.plusWeeks(weekOffset)
+                    activeWeekDays.map { dow ->
+                        val daysFromSat = (dow.value + 1) % 7
+                        weekSaturday.plusDays(daysFromSat.toLong())
+                    }
+                }
+                3 -> {
+                    if (hideDayOff && dayOff != null) {
+                        val weekOffset = Math.floorDiv(pageOffset, 2L)
+                        val subPage = Math.floorMod(pageOffset, 2L).toInt()
+                        val weekSaturday = baseAnchorDate.plusWeeks(weekOffset)
+                        val weekDays = activeWeekDays.map { dow ->
+                            val daysFromSat = (dow.value + 1) % 7
+                            weekSaturday.plusDays(daysFromSat.toLong())
+                        }
+                        if (subPage == 0) weekDays.take(3) else weekDays.drop(3).take(3)
+                    } else {
+                        val pageStartDate = baseAnchorDate.plusDays(pageOffset * 3)
+                        (0 until 3).map { pageStartDate.plusDays(it.toLong()) }
+                    }
+                }
+                else -> { // daysCount == 1 (Day view)
+                    if (hideDayOff && dayOff != null) {
+                        val activePerWeek = activeWeekDays.size.toLong()
+                        val weekOffset = Math.floorDiv(pageOffset, activePerWeek)
+                        val dayIndex = Math.floorMod(pageOffset, activePerWeek).toInt()
+                        val weekSaturday = baseAnchorDate.plusWeeks(weekOffset)
+                        val targetDow = activeWeekDays[dayIndex]
+                        val daysFromSat = (targetDow.value + 1) % 7
+                        listOf(weekSaturday.plusDays(daysFromSat.toLong()))
+                    } else {
+                        listOf(baseAnchorDate.plusDays(pageOffset))
+                    }
+                }
+            }
+        }
+    }
+
+    // Helper to calculate the page index for a given date
+    val getPageForDate: (LocalDate) -> Int = remember(daysCount, hideDayOff, dayOff, activeWeekDays) {
+        { targetDate: LocalDate ->
+            var activeDate = targetDate
+            if (hideDayOff && dayOff != null && activeDate.dayOfWeek == dayOff) {
+                activeDate = activeDate.plusDays(1)
+            }
+            val daysFromSat = (activeDate.dayOfWeek.value + 1) % 7
+            val weekSaturday = activeDate.minusDays(daysFromSat.toLong())
+            val weekOffset = ChronoUnit.DAYS.between(baseAnchorDate, weekSaturday) / 7
+
+            when (daysCount) {
+                7 -> {
+                    (PAGER_BASE_INDEX + weekOffset).toInt()
+                }
+                3 -> {
+                    if (hideDayOff && dayOff != null) {
+                        val indexInActive = activeWeekDays.indexOf(activeDate.dayOfWeek).coerceAtLeast(0)
+                        val subPage = if (indexInActive < 3) 0 else 1
+                        (PAGER_BASE_INDEX + (weekOffset * 2 + subPage)).toInt()
+                    } else {
+                        val daysDiff = ChronoUnit.DAYS.between(baseAnchorDate, activeDate)
+                        (PAGER_BASE_INDEX + (daysDiff / 3)).toInt()
+                    }
+                }
+                else -> { // daysCount == 1
+                    if (hideDayOff && dayOff != null) {
+                        val indexInActive = activeWeekDays.indexOf(activeDate.dayOfWeek).coerceAtLeast(0)
+                        (PAGER_BASE_INDEX + (weekOffset * activeWeekDays.size + indexInActive)).toInt()
+                    } else {
+                        val daysDiff = ChronoUnit.DAYS.between(baseAnchorDate, activeDate)
+                        (PAGER_BASE_INDEX + daysDiff).toInt()
+                    }
+                }
+            }
+        }
     }
 
     // Infinite Horizontal Pager: 10,000 pages for continuous, endless swiping
+    val initialPage = remember(daysCount, hideDayOff, dayOff) {
+        getPageForDate(centerDate).coerceIn(0, 9999)
+    }
+
     val pagerState = rememberPagerState(
-        initialPage = PAGER_BASE_INDEX + (ChronoUnit.DAYS.between(baseAnchorDate, getAlignedCenter(centerDate)) / daysCount).toInt(),
+        initialPage = initialPage,
         pageCount = { 10000 }
     )
 
-    // Synchronize pager when centerDate changes externally
-    LaunchedEffect(centerDate, daysCount) {
-        val daysDiff = ChronoUnit.DAYS.between(baseAnchorDate, getAlignedCenter(centerDate))
-        val expectedPage = (PAGER_BASE_INDEX + (daysDiff / daysCount)).toInt().coerceIn(0, 9999)
+    // Synchronize pager when centerDate or settings change externally
+    LaunchedEffect(centerDate, daysCount, hideDayOff, dayOff) {
+        val expectedPage = getPageForDate(centerDate).coerceIn(0, 9999)
         if (pagerState.currentPage != expectedPage) {
             pagerState.animateScrollToPage(expectedPage)
         }
@@ -136,8 +230,8 @@ fun ProportionalTimelineView(
     // Synchronize external date when user swipes pager
     LaunchedEffect(pagerState) {
         snapshotFlow { pagerState.currentPage }.collect { currentPage ->
-            val pageOffset = (currentPage - PAGER_BASE_INDEX).toLong()
-            val newPageDate = baseAnchorDate.plusDays(pageOffset * daysCount)
+            val pageDates = getDatesForPage(currentPage)
+            val newPageDate = pageDates.firstOrNull() ?: centerDate
             if (newPageDate != centerDate) {
                 onDateChanged?.invoke(newPageDate)
             }
@@ -392,16 +486,8 @@ fun ProportionalTimelineView(
             modifier = Modifier.fillMaxSize(),
             beyondViewportPageCount = 1
         ) { page ->
-            val pageOffset = (page - PAGER_BASE_INDEX).toLong()
-            val pageStartDate = baseAnchorDate.plusDays(pageOffset * daysCount)
-
-            val datesInThisPage = remember(pageStartDate, daysCount, hideDayOff, dayOff) {
-                val allDays = (0 until daysCount).map { pageStartDate.plusDays(it.toLong()) }
-                if (daysCount == 7 && hideDayOff && dayOff != null) {
-                    allDays.filter { it.dayOfWeek != dayOff }
-                } else {
-                    allDays
-                }
+            val datesInThisPage = remember(page, daysCount, hideDayOff, dayOff) {
+                getDatesForPage(page)
             }
 
             Column(modifier = Modifier.fillMaxSize()) {
