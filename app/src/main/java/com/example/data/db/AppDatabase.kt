@@ -4,12 +4,50 @@ import android.content.Context
 import androidx.room.Database
 import androidx.room.Room
 import androidx.room.RoomDatabase
+import androidx.room.TypeConverter
+import androidx.room.TypeConverters
 import androidx.sqlite.db.SupportSQLiteDatabase
 import com.example.data.dao.*
 import com.example.data.model.*
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+
+class AppConverters {
+    @TypeConverter
+    fun fromAppointmentStatus(status: AppointmentStatus?): String {
+        return status?.name ?: AppointmentStatus.UNCONFIRMED.name
+    }
+
+    @TypeConverter
+    fun toAppointmentStatus(value: String?): AppointmentStatus {
+        if (value == null) return AppointmentStatus.UNCONFIRMED
+        return try {
+            when (value) {
+                "SCHEDULED" -> AppointmentStatus.CONFIRMED
+                "DELAYED" -> AppointmentStatus.UNCONFIRMED
+                else -> AppointmentStatus.valueOf(value)
+            }
+        } catch (e: Exception) {
+            AppointmentStatus.UNCONFIRMED
+        }
+    }
+
+    @TypeConverter
+    fun fromPatientClassification(classification: PatientClassification?): String {
+        return classification?.name ?: PatientClassification.DISCIPLINED.name
+    }
+
+    @TypeConverter
+    fun toPatientClassification(value: String?): PatientClassification {
+        if (value == null) return PatientClassification.DISCIPLINED
+        return try {
+            PatientClassification.valueOf(value)
+        } catch (e: Exception) {
+            PatientClassification.DISCIPLINED
+        }
+    }
+}
 
 @Database(
     entities = [
@@ -19,9 +57,10 @@ import kotlinx.coroutines.launch
         WhatsAppTemplateEntity::class,
         UserEntity::class
     ],
-    version = 4,
+    version = 5,
     exportSchema = false
 )
+@TypeConverters(AppConverters::class)
 abstract class AppDatabase : RoomDatabase() {
 
     abstract fun patientDao(): PatientDao

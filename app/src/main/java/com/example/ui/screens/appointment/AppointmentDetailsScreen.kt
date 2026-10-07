@@ -4,6 +4,7 @@ import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -95,9 +96,9 @@ fun AppointmentDetailsScreen(
                 Button(
                     onClick = {
                         showCancelOrDeleteDialog = false
-                        onStatusChange(AppointmentStatus.NO_SHOW)
+                        onStatusChange(AppointmentStatus.CANCELLED)
                     },
-                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFEF6C00))
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFE53935))
                 ) {
                     Text("إلغاء وإخفاء من التقويم (حفظ بالسجل)")
                 }
@@ -369,6 +370,40 @@ fun AppointmentDetailsScreen(
                                     Text(text = "حالة الموعد", fontSize = 13.sp, color = Color(0xFF455A64))
                                 }
                                 StatusBadge(status = appointment.status)
+                            }
+
+                            // Quick change status chips
+                            Column(modifier = Modifier.fillMaxWidth()) {
+                                Text(
+                                    text = "تغيير حالة الموعد مباشرة:",
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = Color(0xFF78909C)
+                                )
+                                Spacer(modifier = Modifier.height(6.dp))
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .horizontalScroll(rememberScrollState()),
+                                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                ) {
+                                    AppointmentStatus.values().forEach { st ->
+                                        val isSelected = appointment.status == st
+                                        Surface(
+                                            shape = RoundedCornerShape(8.dp),
+                                            color = if (isSelected) st.toComposeColor() else Color(0xFFECEFF1),
+                                            modifier = Modifier.clickable { onStatusChange(st) }
+                                        ) {
+                                            Text(
+                                                text = st.label,
+                                                fontSize = 11.sp,
+                                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                                                color = if (isSelected) Color.White else Color(0xFF37474F),
+                                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
+                                            )
+                                        }
+                                    }
+                                }
                             }
 
                             // Notes row

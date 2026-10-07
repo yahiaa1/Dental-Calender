@@ -23,11 +23,12 @@ fun StatusBadge(
     modifier: Modifier = Modifier
 ) {
     val (bgColor, textColor, icon) = when (status) {
-        AppointmentStatus.COMPLETED -> Triple(StatusCompletedBg, StatusCompleted, Icons.Default.CheckCircle)
-        AppointmentStatus.SCHEDULED -> Triple(StatusScheduledBg, StatusScheduled, Icons.Default.Schedule)
-        AppointmentStatus.DELAYED -> Triple(StatusDelayedBg, StatusDelayed, Icons.Default.ErrorOutline)
+        AppointmentStatus.UNCONFIRMED -> Triple(StatusUnconfirmedBg, StatusUnconfirmed, Icons.Default.HourglassEmpty)
+        AppointmentStatus.CONFIRMED -> Triple(StatusConfirmedBg, StatusConfirmed, Icons.Default.CheckCircle)
         AppointmentStatus.IN_TREATMENT -> Triple(StatusInTreatmentBg, StatusInTreatment, Icons.Default.PlayCircleFilled)
-        AppointmentStatus.NO_SHOW -> Triple(StatusNoShowBg, StatusNoShow, Icons.Default.Cancel)
+        AppointmentStatus.COMPLETED -> Triple(StatusCompletedBg, StatusCompleted, Icons.Default.TaskAlt)
+        AppointmentStatus.CANCELLED -> Triple(StatusCancelledBg, StatusCancelled, Icons.Default.Cancel)
+        AppointmentStatus.NO_SHOW -> Triple(StatusNoShowBg, StatusNoShow, Icons.Default.PersonOff)
     }
 
     Row(

@@ -408,6 +408,9 @@ fun DentalClinicApp(
                         syncStatusMessage = firebaseSyncStatus,
                         onBackupToFirebase = { viewModel.backupToFirebase() },
                         onRestoreFromFirebase = { viewModel.restoreFromFirebase() },
+                        onTestConnection = { onResult ->
+                            viewModel.testFirebaseConnection(context, onResult)
+                        },
                         onBack = { viewModel.navigateTo(ClinicScreen.Settings) }
                     )
                 }

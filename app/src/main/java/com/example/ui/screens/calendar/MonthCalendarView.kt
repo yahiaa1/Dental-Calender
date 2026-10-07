@@ -204,10 +204,11 @@ private fun MonthDayCell(
             val distinctStatuses = statuses.distinct().take(3)
             distinctStatuses.forEach { status ->
                 val dotColor = when (status) {
-                    AppointmentStatus.COMPLETED -> StatusCompleted
-                    AppointmentStatus.SCHEDULED -> StatusScheduled
-                    AppointmentStatus.DELAYED -> StatusDelayed
+                    AppointmentStatus.UNCONFIRMED -> StatusUnconfirmed
+                    AppointmentStatus.CONFIRMED -> StatusConfirmed
                     AppointmentStatus.IN_TREATMENT -> StatusInTreatment
+                    AppointmentStatus.COMPLETED -> StatusCompleted
+                    AppointmentStatus.CANCELLED -> StatusCancelled
                     AppointmentStatus.NO_SHOW -> StatusNoShow
                 }
                 Box(

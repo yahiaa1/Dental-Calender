@@ -6,11 +6,12 @@ import com.example.ui.theme.*
 // Restored to the original beloved 5 statuses as explicitly requested:
 // "رجع الحالة لنفس النظام القديم"
 enum class AppointmentStatus(val label: String, val colorHex: String) {
-    SCHEDULED("مجدول", "#1E88E5"),        // Blue
-    IN_TREATMENT("جار العلاج", "#FB8C00"), // Orange
-    COMPLETED("مكتمل", "#43A047"),         // Green
-    DELAYED("متأخر", "#E53935"),           // Red
-    NO_SHOW("ملغي / لم يحضر", "#757575");  // Gray
+    UNCONFIRMED("لم يتم التاكيد", "#FFA000"), // Amber / Yellow
+    CONFIRMED("مؤكد", "#1E88E5"),             // Blue
+    IN_TREATMENT("جار العلاج", "#8E24AA"),     // Purple
+    COMPLETED("مكتمل", "#43A047"),             // Green
+    CANCELLED("ملغي", "#E53935"),              // Red
+    NO_SHOW("لم يحضر", "#757575");             // Gray
 
     fun toComposeColor(): Color {
         return try {

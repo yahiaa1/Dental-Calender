@@ -189,9 +189,9 @@ fun AppointmentCardItem(
                 modifier = Modifier.width(62.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                val isCancelledOrDelayed = appointment.status == AppointmentStatus.NO_SHOW || appointment.status == AppointmentStatus.DELAYED
+                val isCancelledOrDelayed = appointment.status == AppointmentStatus.NO_SHOW || appointment.status == AppointmentStatus.CANCELLED
                 val timeColor = if (isCancelledOrDelayed) {
-                    StatusDelayed
+                    StatusCancelled
                 } else {
                     Color(0xFF37474F)
                 }
@@ -204,7 +204,7 @@ fun AppointmentCardItem(
                 Text(
                     text = TimeFormatter.format12Hour(appointment.endTime),
                     fontSize = 10.sp,
-                    color = if (isCancelledOrDelayed) StatusDelayed else Color(0xFF78909C)
+                    color = if (isCancelledOrDelayed) StatusCancelled else Color(0xFF78909C)
                 )
             }
 
@@ -220,13 +220,13 @@ fun AppointmentCardItem(
                 )
                 Spacer(modifier = Modifier.height(2.dp))
                 Text(
-                    text = "${appointment.patientPhone} • 👤 ${appointment.bookedByUserName}",
+                    text = "${appointment.patientPhone} • 👤 ${appointment.bookedByUserName} [${appointment.status.label}]",
                     fontSize = 11.sp,
                     color = Color(0xFF78909C)
                 )
                 Spacer(modifier = Modifier.height(2.dp))
                 Text(
-                    text = appointment.procedureName,
+                    text = "${appointment.procedureName} (${appointment.status.label})",
                     fontSize = 12.sp,
                     color = Color(0xFF00796B),
                     fontWeight = FontWeight.Medium

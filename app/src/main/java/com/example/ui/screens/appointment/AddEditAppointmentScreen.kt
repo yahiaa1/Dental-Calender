@@ -70,7 +70,7 @@ fun AddEditAppointmentScreen(
         )
     }
     var selectedStatus by remember {
-        mutableStateOf(existingAppointment?.status ?: AppointmentStatus.SCHEDULED)
+        mutableStateOf(existingAppointment?.status ?: AppointmentStatus.UNCONFIRMED)
     }
     var notesText by remember { mutableStateOf(existingAppointment?.notes ?: "") }
 

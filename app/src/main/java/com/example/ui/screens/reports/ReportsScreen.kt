@@ -47,9 +47,9 @@ fun ReportsScreen(
         appointments.filter { it.dateStr == dateStr }
     }
 
-    // Expected daily target: Sum of prices of all non-cancelled appointments for that day as requested!
+    // Expected daily target: Sum of prices of all non-cancelled/non-absent appointments for that day as requested!
     val expectedDailyTarget = remember(dayAppointments) {
-        dayAppointments.filter { it.status != AppointmentStatus.NO_SHOW }.sumOf { it.price }
+        dayAppointments.filter { it.status != AppointmentStatus.NO_SHOW && it.status != AppointmentStatus.CANCELLED }.sumOf { it.price }
     }
     // Actual collected revenue for completed appointments
     val actualCollectedRevenue = remember(dayAppointments) {
@@ -65,11 +65,14 @@ fun ReportsScreen(
     val dayInTreatment = remember(dayAppointments) {
         dayAppointments.count { it.status == AppointmentStatus.IN_TREATMENT }
     }
-    val dayScheduled = remember(dayAppointments) {
-        dayAppointments.count { it.status == AppointmentStatus.SCHEDULED }
+    val dayConfirmed = remember(dayAppointments) {
+        dayAppointments.count { it.status == AppointmentStatus.CONFIRMED }
     }
-    val dayDelayed = remember(dayAppointments) {
-        dayAppointments.count { it.status == AppointmentStatus.DELAYED }
+    val dayUnconfirmed = remember(dayAppointments) {
+        dayAppointments.count { it.status == AppointmentStatus.UNCONFIRMED }
+    }
+    val dayCancelled = remember(dayAppointments) {
+        dayAppointments.count { it.status == AppointmentStatus.CANCELLED }
     }
     val dayNoShow = remember(dayAppointments) {
         dayAppointments.count { it.status == AppointmentStatus.NO_SHOW }
@@ -110,7 +113,7 @@ fun ReportsScreen(
                             appendLine("• التارجت المتوقع: ${expectedDailyTarget.toInt()} ج.م")
                             appendLine("• المحصل الفعلي: ${actualCollectedRevenue.toInt()} ج.م (نسبة الإنجاز: $targetAchievedPercentage%)")
                             appendLine("• إجمالي مواعيد اليوم: ${dayAppointments.size}")
-                            appendLine("• مكتمل: $dayCompleted | جار العلاج: $dayInTreatment | مجدول: $dayScheduled | متأخر: $dayDelayed | لم يحضر: $dayNoShow")
+                            appendLine("• مؤكد: $dayConfirmed | جار العلاج: $dayInTreatment | مكتمل: $dayCompleted | لم يتم التاكيد: $dayUnconfirmed | ملغي: $dayCancelled | لم يحضر: $dayNoShow")
                             appendLine("-----------------------------")
                             appendLine("تفاصيل المواعيد:")
                             dayAppointments.forEach {
@@ -296,15 +299,26 @@ fun ReportsScreen(
             }
 
             // Status Breakdown for this Day
-            Row(
+            Column(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                verticalArrangement = Arrangement.spacedBy(6.dp)
             ) {
-                StatusMiniCard("مكتمل", "$dayCompleted", StatusCompleted, Modifier.weight(1f))
-                StatusMiniCard("جار العلاج", "$dayInTreatment", StatusInTreatment, Modifier.weight(1f))
-                StatusMiniCard("مجدول", "$dayScheduled", StatusScheduled, Modifier.weight(1f))
-                StatusMiniCard("متأخر", "$dayDelayed", StatusDelayed, Modifier.weight(1f))
-                StatusMiniCard("لم يحضر", "$dayNoShow", StatusNoShow, Modifier.weight(1f))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    StatusMiniCard("مؤكد", "$dayConfirmed", StatusConfirmed, Modifier.weight(1f))
+                    StatusMiniCard("جار العلاج", "$dayInTreatment", StatusInTreatment, Modifier.weight(1f))
+                    StatusMiniCard("مكتمل", "$dayCompleted", StatusCompleted, Modifier.weight(1f))
+                }
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    StatusMiniCard("لم يتم التاكيد", "$dayUnconfirmed", StatusUnconfirmed, Modifier.weight(1f))
+                    StatusMiniCard("ملغي", "$dayCancelled", StatusCancelled, Modifier.weight(1f))
+                    StatusMiniCard("لم يحضر", "$dayNoShow", StatusNoShow, Modifier.weight(1f))
+                }
             }
 
             // Appointments List contributing to this target

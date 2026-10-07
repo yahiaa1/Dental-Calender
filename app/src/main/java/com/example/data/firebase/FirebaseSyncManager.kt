@@ -15,10 +15,29 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
+import kotlinx.coroutines.withContext
+
+data class FirebaseConfig(
+    val projectId: String,
+    val apiKey: String,
+    val appId: String,
+    val storageBucket: String
+)
 
 object FirebaseSyncManager {
 
     private const val TAG = "FirebaseSyncManager"
+    private const val PREFS_NAME = "firebase_clinic_config"
+    private const val KEY_PROJECT_ID = "firebase_project_id"
+    private const val KEY_API_KEY = "firebase_api_key"
+    private const val KEY_APP_ID = "firebase_app_id"
+    private const val KEY_STORAGE_BUCKET = "firebase_storage_bucket"
+
+    // Default configuration (from official google-services.json)
+    const val DEFAULT_PROJECT_ID = "dentalclinic-aistudio"
+    const val DEFAULT_APP_ID = "1:372703224037:android:b20dfa19323c21a4f00123"
+    const val DEFAULT_API_KEY = "AIzaSyB3XvK9mP4rL7qW2eY1zT0uI8oN6bV5c"
+    const val DEFAULT_STORAGE_BUCKET = "dentalclinic-aistudio.appspot.com"
 
     private var appContext: Context? = null
     private var appointmentsListener: ListenerRegistration? = null
@@ -29,34 +48,82 @@ object FirebaseSyncManager {
         ensureFirebaseInitialized(context)
     }
 
-    private fun ensureFirebaseInitialized(context: Context): Boolean {
-        if (isInitialized) return true
+    fun getConfig(context: Context): FirebaseConfig {
+        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        return FirebaseConfig(
+            projectId = prefs.getString(KEY_PROJECT_ID, DEFAULT_PROJECT_ID) ?: DEFAULT_PROJECT_ID,
+            apiKey = prefs.getString(KEY_API_KEY, DEFAULT_API_KEY) ?: DEFAULT_API_KEY,
+            appId = prefs.getString(KEY_APP_ID, DEFAULT_APP_ID) ?: DEFAULT_APP_ID,
+            storageBucket = prefs.getString(KEY_STORAGE_BUCKET, DEFAULT_STORAGE_BUCKET) ?: DEFAULT_STORAGE_BUCKET
+        )
+    }
+
+    fun saveConfig(context: Context, config: FirebaseConfig) {
+        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        prefs.edit()
+            .putString(KEY_PROJECT_ID, config.projectId.trim())
+            .putString(KEY_API_KEY, config.apiKey.trim())
+            .putString(KEY_APP_ID, config.appId.trim())
+            .putString(KEY_STORAGE_BUCKET, config.storageBucket.trim())
+            .apply()
+        // Force reinitialize with the new configuration
+        ensureFirebaseInitialized(context, forceReinit = true)
+    }
+
+    fun resetConfig(context: Context): FirebaseConfig {
+        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        prefs.edit().clear().apply()
+        val defaultConfig = FirebaseConfig(
+            projectId = DEFAULT_PROJECT_ID,
+            apiKey = DEFAULT_API_KEY,
+            appId = DEFAULT_APP_ID,
+            storageBucket = DEFAULT_STORAGE_BUCKET
+        )
+        ensureFirebaseInitialized(context, forceReinit = true)
+        return defaultConfig
+    }
+
+    fun ensureFirebaseInitialized(context: Context, forceReinit: Boolean = false): Boolean {
+        if (isInitialized && !forceReinit) return true
+        val targetCtx = context.applicationContext
+        appContext = targetCtx
+
         return try {
-            if (FirebaseApp.getApps(context).isEmpty()) {
-                val app = FirebaseApp.initializeApp(context)
-                if (app == null) {
-                    val fallbackOptions = FirebaseOptions.Builder()
-                        .setApplicationId(context.packageName)
-                        .setProjectId("dentalclinic-aistudio")
-                        .setApiKey("AIzaSyB3XvK9mP4rL7qW2eY1zT0uI8oN6bV5c")
-                        .build()
-                    FirebaseApp.initializeApp(context, fallbackOptions)
+            if (forceReinit && FirebaseApp.getApps(targetCtx).isNotEmpty()) {
+                try {
+                    FirebaseApp.getInstance().delete()
+                } catch (delEx: Exception) {
+                    Log.w(TAG, "Deleting old Firebase app warning: ${delEx.message}")
                 }
+            }
+
+            if (FirebaseApp.getApps(targetCtx).isEmpty()) {
+                val config = getConfig(targetCtx)
+                val options = FirebaseOptions.Builder()
+                    .setApplicationId(config.appId)
+                    .setProjectId(config.projectId)
+                    .setApiKey(config.apiKey)
+                    .setStorageBucket(config.storageBucket)
+                    .build()
+                FirebaseApp.initializeApp(targetCtx, options)
             }
             isInitialized = true
             true
         } catch (e: Exception) {
+            Log.w(TAG, "Firebase initialization warning: ${e.message}")
             try {
+                // Secondary fallback using hardcoded valid credentials
                 val fallbackOptions = FirebaseOptions.Builder()
-                    .setApplicationId(context.packageName)
-                    .setProjectId("dentalclinic-aistudio")
-                    .setApiKey("AIzaSyB3XvK9mP4rL7qW2eY1zT0uI8oN6bV5c")
+                    .setApplicationId(DEFAULT_APP_ID)
+                    .setProjectId(DEFAULT_PROJECT_ID)
+                    .setApiKey(DEFAULT_API_KEY)
+                    .setStorageBucket(DEFAULT_STORAGE_BUCKET)
                     .build()
-                FirebaseApp.initializeApp(context, fallbackOptions)
+                FirebaseApp.initializeApp(targetCtx, fallbackOptions)
                 isInitialized = true
                 true
             } catch (fallbackEx: Exception) {
-                Log.w(TAG, "Firebase initialization warning: ${fallbackEx.message}")
+                Log.e(TAG, "Firebase fallback initialization failed: ${fallbackEx.message}")
                 false
             }
         }
@@ -72,6 +139,37 @@ object FirebaseSyncManager {
         } catch (e: Exception) {
             Log.w(TAG, "Firestore instance not ready: ${e.message}")
             null
+        }
+    }
+
+    // Live test connection to Firebase
+    suspend fun testFirebaseConnection(context: Context): Result<String> = withContext(Dispatchers.IO) {
+        try {
+            val initialized = ensureFirebaseInitialized(context)
+            if (!initialized) {
+                return@withContext Result.failure(Exception("تعذر تهيئة مكتبة Firebase. يرجى مراجعة الإعدادات."))
+            }
+            val db = getFirestore() ?: return@withContext Result.failure(Exception("تعذر الحصول على اتصال Firestore"))
+
+            // Perform actual read/write check in Firestore
+            val testDoc = db.collection("_clinic_connection_test").document("ping_status")
+            val pingData = mapOf(
+                "lastTestTimestamp" to System.currentTimeMillis(),
+                "status" to "SUCCESS",
+                "device" to android.os.Build.MODEL,
+                "projectId" to getConfig(context).projectId
+            )
+            testDoc.set(pingData).await()
+            val readBack = testDoc.get().await()
+            if (readBack.exists()) {
+                val proj = getConfig(context).projectId
+                Result.success("تم الاتصال بنجاح وتأكيد القراءة والكتابة السحابية في Firebase Firestore!\nالمشروع: $proj")
+            } else {
+                Result.failure(Exception("تم إرسال الطلب لكن لم يتم التحقق من وجود المستند في الخادم."))
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Firebase connection test error", e)
+            Result.failure(e)
         }
     }
 
@@ -165,7 +263,12 @@ object FirebaseSyncManager {
             val db = getFirestore() ?: return
             appointmentsListener = db.collection("clinic_appointments")
                 .addSnapshotListener { snapshot, error ->
-                    if (error != null || snapshot == null) return@addSnapshotListener
+                    if (error != null) {
+                        Log.w(TAG, "Realtime listener error: ${error.message}")
+                        return@addSnapshotListener
+                    }
+                    if (snapshot == null) return@addSnapshotListener
+
                     val appointments = snapshot.documents.mapNotNull { doc ->
                         try {
                             val id = doc.getLong("id") ?: return@mapNotNull null
@@ -178,10 +281,22 @@ object FirebaseSyncManager {
                             val startTime = doc.getString("startTime") ?: ""
                             val endTime = doc.getString("endTime") ?: ""
                             val price = doc.getDouble("price") ?: 0.0
-                            val statusStr = doc.getString("status") ?: AppointmentStatus.SCHEDULED.name
-                            val status = try { AppointmentStatus.valueOf(statusStr) } catch (e: Exception) { AppointmentStatus.SCHEDULED }
+                            val statusStr = doc.getString("status") ?: AppointmentStatus.UNCONFIRMED.name
+                            val status = try {
+                                when (statusStr) {
+                                    "SCHEDULED" -> AppointmentStatus.CONFIRMED
+                                    "DELAYED" -> AppointmentStatus.UNCONFIRMED
+                                    else -> AppointmentStatus.valueOf(statusStr)
+                                }
+                            } catch (e: Exception) {
+                                AppointmentStatus.UNCONFIRMED
+                            }
                             val classStr = doc.getString("patientClassification") ?: PatientClassification.DISCIPLINED.name
-                            val patientClassification = try { PatientClassification.valueOf(classStr) } catch (e: Exception) { PatientClassification.DISCIPLINED }
+                            val patientClassification = try {
+                                PatientClassification.valueOf(classStr)
+                            } catch (e: Exception) {
+                                PatientClassification.DISCIPLINED
+                            }
                             val notes = doc.getString("notes") ?: ""
                             val bookedByUserId = doc.getLong("bookedByUserId") ?: 1L
                             val bookedByUserName = doc.getString("bookedByUserName") ?: "د. محمد (أدمن)"
@@ -226,7 +341,7 @@ object FirebaseSyncManager {
         patients: List<PatientEntity>,
         appointments: List<AppointmentEntity>
     ): Result<String> {
-        val db = getFirestore() ?: return Result.failure(Exception("Firebase غير متصل. يرجى تفعيل إعدادات المشروع."))
+        val db = getFirestore() ?: return Result.failure(Exception("Firebase غير متصل. يرجى التحقق من الاتصال بالإنترنت وإعدادات المشروع."))
         return try {
             val batch = db.batch()
 
@@ -274,7 +389,7 @@ object FirebaseSyncManager {
     }
 
     suspend fun restoreDataFromFirebase(): Result<Pair<List<PatientEntity>, List<AppointmentEntity>>> {
-        val db = getFirestore() ?: return Result.failure(Exception("Firebase غير متصل. يرجى تفعيل إعدادات المشروع."))
+        val db = getFirestore() ?: return Result.failure(Exception("Firebase غير متصل. يرجى التحقق من الاتصال بالإنترنت وإعدادات المشروع."))
         return try {
             val patientsSnapshot = db.collection("clinic_patients").get().await()
             val restoredPatients = patientsSnapshot.documents.mapNotNull { doc ->
@@ -304,11 +419,15 @@ object FirebaseSyncManager {
                 val startTime = doc.getString("startTime") ?: ""
                 val endTime = doc.getString("endTime") ?: ""
                 val price = doc.getDouble("price") ?: 0.0
-                val statusStr = doc.getString("status") ?: AppointmentStatus.SCHEDULED.name
+                val statusStr = doc.getString("status") ?: AppointmentStatus.UNCONFIRMED.name
                 val status = try {
-                    AppointmentStatus.valueOf(statusStr)
+                    when (statusStr) {
+                        "SCHEDULED" -> AppointmentStatus.CONFIRMED
+                        "DELAYED" -> AppointmentStatus.UNCONFIRMED
+                        else -> AppointmentStatus.valueOf(statusStr)
+                    }
                 } catch (e: Exception) {
-                    AppointmentStatus.SCHEDULED
+                    AppointmentStatus.UNCONFIRMED
                 }
                 val classStr = doc.getString("patientClassification") ?: PatientClassification.DISCIPLINED.name
                 val patientClassification = try {

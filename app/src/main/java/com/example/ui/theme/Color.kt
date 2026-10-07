@@ -29,21 +29,30 @@ val Chair3Bg = Color(0xFFE8F5E9)
 val Chair3Text = Color(0xFF43A047)
 val Chair3Border = Color(0xFFC8E6C9)
 
-// Status colors
-val StatusScheduled = Color(0xFF1E88E5)
-val StatusScheduledBg = Color(0xFFE3F2FD)
+// Status colors (6 distinct statuses)
+val StatusUnconfirmed = Color(0xFFFFA000)
+val StatusUnconfirmedBg = Color(0xFFFFF8E1)
+
+val StatusConfirmed = Color(0xFF1E88E5)
+val StatusConfirmedBg = Color(0xFFE3F2FD)
+
+val StatusInTreatment = Color(0xFF8E24AA)
+val StatusInTreatmentBg = Color(0xFFF3E5F5)
 
 val StatusCompleted = Color(0xFF43A047)
 val StatusCompletedBg = Color(0xFFE8F5E9)
 
-val StatusDelayed = Color(0xFFE53935)
-val StatusDelayedBg = Color(0xFFFFEBEE)
+val StatusCancelled = Color(0xFFE53935)
+val StatusCancelledBg = Color(0xFFFFEBEE)
 
-val StatusInTreatment = Color(0xFFFB8C00)
-val StatusInTreatmentBg = Color(0xFFFFF3E0)
-
-val StatusNoShow = Color(0xFF616161)
+val StatusNoShow = Color(0xFF757575)
 val StatusNoShowBg = Color(0xFFEEEEEE)
+
+// Compatibility aliases
+val StatusScheduled = StatusConfirmed
+val StatusScheduledBg = StatusConfirmedBg
+val StatusDelayed = StatusCancelled
+val StatusDelayedBg = StatusCancelledBg
 
 // WhatsApp brand color
 val WhatsAppGreen = Color(0xFF25D366)

@@ -17,6 +17,7 @@ import com.example.utils.TimeFormatter
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.time.LocalDate
 
 sealed class ClinicScreen {
@@ -182,7 +183,7 @@ class ClinicViewModel(application: Application) : AndroidViewModel(application) 
         filterState
     ) { appointments, hideCancelled, filter ->
         appointments.filter { app ->
-            if (hideCancelled && app.status == AppointmentStatus.NO_SHOW) {
+            if (hideCancelled && (app.status == AppointmentStatus.CANCELLED || app.status == AppointmentStatus.NO_SHOW)) {
                 return@filter false
             }
 
@@ -661,6 +662,23 @@ class ClinicViewModel(application: Application) : AndroidViewModel(application) 
                 firebaseSyncStatus.value = "تم استرجاع ${patients.size} مريض و ${appointments.size} موعد بنجاح من Firebase!"
             }.onFailure { err ->
                 firebaseSyncStatus.value = "فشل الاسترجاع: ${err.localizedMessage ?: "تحقق من الاتصال بالإنترنت"}"
+            }
+        }
+    }
+
+    fun testFirebaseConnection(context: Context, onResult: ((Boolean, String) -> Unit)? = null) {
+        viewModelScope.launch(Dispatchers.IO) {
+            isFirebaseSyncing.value = true
+            firebaseSyncStatus.value = "جارِ فحص واختبار الاتصال الفعلي بـ Firebase..."
+            val result = FirebaseSyncManager.testFirebaseConnection(context)
+            isFirebaseSyncing.value = false
+            result.onSuccess { msg ->
+                firebaseSyncStatus.value = msg
+                withContext(Dispatchers.Main) { onResult?.invoke(true, msg) }
+            }.onFailure { err ->
+                val errorMsg = "فشل الاتصال: ${err.localizedMessage ?: "تحقق من الإنترنت والإعدادات"}"
+                firebaseSyncStatus.value = errorMsg
+                withContext(Dispatchers.Main) { onResult?.invoke(false, errorMsg) }
             }
         }
     }

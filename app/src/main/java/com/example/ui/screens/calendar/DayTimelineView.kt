@@ -287,7 +287,7 @@ private fun TimelineSlotCell(
                     textAlign = TextAlign.Center
                 )
                 Text(
-                    text = appointment.procedureName,
+                    text = "${appointment.procedureName} (${appointment.status.label})",
                     color = accentColor,
                     fontSize = 10.sp,
                     fontWeight = FontWeight.SemiBold,
@@ -296,9 +296,9 @@ private fun TimelineSlotCell(
                     textAlign = TextAlign.Center
                 )
                 Text(
-                    text = "👤 ${appointment.bookedByUserName}",
+                    text = "👤 ${appointment.bookedByUserName} [${appointment.status.label}]",
                     color = Color(0xFF546E7A),
-                    fontSize = 9.sp,
+                    fontSize = 8.sp,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                     textAlign = TextAlign.Center

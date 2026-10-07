@@ -878,28 +878,43 @@ private fun DayColumnSlot(
                         }
                     }
 
-                    // Procedure & Time (12-Hour format)
+                    // Procedure & Status & Time (12-Hour format)
                     Text(
-                        text = if (pos.totalCols > 1) {
-                            "${TimeFormatter.format12Hour(app.startTime)}"
-                        } else {
-                            "${app.procedureName} • ${TimeFormatter.format12Hour(app.startTime)}"
-                        },
+                        text = "${app.procedureName} [${app.status.label}] • ${TimeFormatter.format12Hour(app.startTime)}",
                         fontSize = 8.sp,
                         color = Color.White.copy(alpha = 0.95f),
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )
 
-                    // Booking employee name - ALWAYS shown right on the card!
-                    Text(
-                        text = "👤 ${app.bookedByUserName}",
-                        fontSize = 8.sp,
-                        fontWeight = FontWeight.Medium,
-                        color = Color.White.copy(alpha = 0.90f),
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
+                    // Booking employee name + status in small font right beside it!
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(3.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text(
+                            text = "👤 ${app.bookedByUserName}",
+                            fontSize = 8.sp,
+                            fontWeight = FontWeight.Medium,
+                            color = Color.White.copy(alpha = 0.90f),
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.weight(1f, fill = false)
+                        )
+                        Surface(
+                            shape = RoundedCornerShape(3.dp),
+                            color = Color.Black.copy(alpha = 0.25f)
+                        ) {
+                            Text(
+                                text = app.status.label,
+                                fontSize = 7.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color.White,
+                                modifier = Modifier.padding(horizontal = 3.dp, vertical = 1.dp)
+                            )
+                        }
+                    }
                 }
             }
         }

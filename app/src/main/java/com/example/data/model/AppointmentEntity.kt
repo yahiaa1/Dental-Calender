@@ -16,7 +16,7 @@ data class AppointmentEntity(
     val startTime: String, // Format: HH:mm (24h internal storage)
     val endTime: String, // Format: HH:mm (24h internal storage)
     val price: Double = 0.0,
-    val status: AppointmentStatus = AppointmentStatus.SCHEDULED,
+    val status: AppointmentStatus = AppointmentStatus.UNCONFIRMED,
     val patientClassification: PatientClassification = PatientClassification.DISCIPLINED,
     val notes: String = "",
     val bookedByUserId: Long = 1L,
