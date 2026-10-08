@@ -7,7 +7,6 @@ import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
-import android.view.View
 import android.widget.RemoteViews
 import com.example.MainActivity
 import com.example.R
@@ -26,14 +25,13 @@ class TodayAppointmentsWidgetProvider : AppWidgetProvider() {
 
     override fun onReceive(context: Context, intent: Intent) {
         super.onReceive(context, intent)
-        if (intent.action == ACTION_UPDATE_WIDGET || intent.action == AppWidgetManager.ACTION_APPWIDGET_UPDATE) {
-            val appWidgetManager = AppWidgetManager.getInstance(context)
-            val thisWidget = ComponentName(context, TodayAppointmentsWidgetProvider::class.java)
-            val appWidgetIds = appWidgetManager.getAppWidgetIds(thisWidget)
-            for (appWidgetId in appWidgetIds) {
-                updateAppWidget(context, appWidgetManager, appWidgetId)
-            }
-            appWidgetManager.notifyAppWidgetViewDataChanged(appWidgetIds, R.id.widget_appointments_list)
+        val action = intent.action
+        if (action == ACTION_UPDATE_WIDGET ||
+            action == AppWidgetManager.ACTION_APPWIDGET_UPDATE ||
+            action == Intent.ACTION_DATE_CHANGED ||
+            action == Intent.ACTION_TIME_CHANGED ||
+            action == Intent.ACTION_TIMEZONE_CHANGED) {
+            notifyDataChanged(context)
         }
     }
 
@@ -59,34 +57,35 @@ class TodayAppointmentsWidgetProvider : AppWidgetProvider() {
         fun updateAppWidget(context: Context, appWidgetManager: AppWidgetManager, appWidgetId: Int) {
             val views = RemoteViews(context.packageName, R.layout.widget_today_appointments)
 
-            // Current date and appointments count
             val today = LocalDate.now()
-            val formattedDate = DateUtils.formatArabicFullDate(today)
-            views.setTextViewText(R.id.widget_current_date, formattedDate)
-
-            // Check count
             var count = 0
+            var totalPrice = 0.0
+
             try {
                 val db = AppDatabase.getDatabase(context)
-                val todayStr = DateUtils.toDateString(today)
-                count = db.appointmentDao().getAppointmentsForDateSync(todayStr).size
+                val allApps = db.appointmentDao().getAllAppointmentsSync()
+                val todayApps = allApps.filter { DateUtils.isSameDay(it.dateStr, today) }
+                count = todayApps.size
+                totalPrice = todayApps.sumOf { it.price }
             } catch (e: Exception) {
                 e.printStackTrace()
             }
 
-            views.setTextViewText(R.id.widget_badge_count, "$count ${if (count == 1) "موعد" else "مواعيد"}")
+            // Header matching user screenshot
+            views.setTextViewText(R.id.widget_title, "تفاصيل المواعيد ($count)")
+            views.setTextViewText(R.id.widget_total_revenue, "إجمالي: ${totalPrice.toInt()} ج.م")
 
-            // Set empty view
+            // Empty view binding
             views.setEmptyView(R.id.widget_appointments_list, R.id.widget_empty_view)
 
-            // Service Intent for ListView
+            // RemoteViews service adapter
             val serviceIntent = Intent(context, TodayAppointmentsWidgetService::class.java).apply {
                 putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, appWidgetId)
-                data = Uri.parse(toUri(Intent.URI_INTENT_SCHEME))
+                data = Uri.fromParts("content", appWidgetId.toString(), null)
             }
             views.setRemoteAdapter(R.id.widget_appointments_list, serviceIntent)
 
-            // Open app on header click
+            // Open app on clicking header or empty view
             val openAppIntent = Intent(context, MainActivity::class.java).apply {
                 flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
             }
@@ -96,35 +95,10 @@ class TodayAppointmentsWidgetProvider : AppWidgetProvider() {
                 openAppIntent,
                 PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
             )
-            views.setOnClickPendingIntent(R.id.widget_title, openAppPendingIntent)
+            views.setOnClickPendingIntent(R.id.widget_header_container, openAppPendingIntent)
             views.setOnClickPendingIntent(R.id.widget_empty_view, openAppPendingIntent)
 
-            // Add Appointment button intent
-            val addIntent = Intent(context, MainActivity::class.java).apply {
-                flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
-                putExtra("action", "add_appointment")
-            }
-            val addPendingIntent = PendingIntent.getActivity(
-                context,
-                1,
-                addIntent,
-                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-            )
-            views.setOnClickPendingIntent(R.id.widget_btn_add, addPendingIntent)
-
-            // Refresh button intent
-            val refreshIntent = Intent(context, TodayAppointmentsWidgetProvider::class.java).apply {
-                action = ACTION_UPDATE_WIDGET
-            }
-            val refreshPendingIntent = PendingIntent.getBroadcast(
-                context,
-                2,
-                refreshIntent,
-                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-            )
-            views.setOnClickPendingIntent(R.id.widget_btn_refresh, refreshPendingIntent)
-
-            // Item click template
+            // PendingIntent template for clicking on appointment items
             val clickItemIntent = Intent(context, MainActivity::class.java).apply {
                 flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
             }

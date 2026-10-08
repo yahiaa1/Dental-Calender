@@ -84,6 +84,7 @@ abstract class AppDatabase : RoomDatabase() {
                     "dental_clinic_db"
                 )
                     .fallbackToDestructiveMigration()
+                    .allowMainThreadQueries()
                     .addCallback(AppDatabaseCallback(scope))
                     .build()
                 INSTANCE = instance

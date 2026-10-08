@@ -10,6 +10,9 @@ interface AppointmentDao {
     @Query("SELECT * FROM appointments ORDER BY dateStr ASC, startTime ASC")
     fun getAllAppointments(): Flow<List<AppointmentEntity>>
 
+    @Query("SELECT * FROM appointments ORDER BY dateStr ASC, startTime ASC")
+    fun getAllAppointmentsSync(): List<AppointmentEntity>
+
     @Query("SELECT * FROM appointments WHERE dateStr = :dateStr ORDER BY startTime ASC")
     fun getAppointmentsForDate(dateStr: String): Flow<List<AppointmentEntity>>
 
