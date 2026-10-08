@@ -118,6 +118,17 @@ class ClinicViewModel(application: Application) : AndroidViewModel(application) 
                 TodayAppointmentsWidgetProvider.notifyDataChanged(application)
             }
         }
+
+        // Automatically ensure upcoming appointments have alarms scheduled for 1 hour before
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                repository.allAppointments.collect { list ->
+                    AppointmentAlarmScheduler.scheduleAllUpcoming(application, list)
+                }
+            } catch (e: Exception) {
+                // Ignore safely
+            }
+        }
     }
 
     // Default to current date
@@ -513,12 +524,12 @@ class ClinicViewModel(application: Application) : AndroidViewModel(application) 
     fun updateAppointmentStatus(appointmentId: Long, newStatus: AppointmentStatus) {
         viewModelScope.launch(Dispatchers.IO) {
             repository.updateAppointmentStatus(appointmentId, newStatus)
-            activeAppointment.value?.let {
-                if (it.id == appointmentId) {
-                    val updated = it.copy(status = newStatus)
+            val updated = repository.getAppointmentById(appointmentId)
+            if (updated != null) {
+                if (activeAppointment.value?.id == appointmentId) {
                     activeAppointment.value = updated
-                    FirebaseSyncManager.autoSyncAppointment(updated)
                 }
+                FirebaseSyncManager.autoSyncAppointment(updated)
             }
             TodayAppointmentsWidgetProvider.notifyDataChanged(getApplication())
         }

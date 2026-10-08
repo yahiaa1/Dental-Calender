@@ -41,13 +41,28 @@ import com.example.ui.viewmodel.ClinicScreen
 import com.example.ui.viewmodel.ClinicViewModel
 import com.example.utils.DateUtils
 import com.example.utils.ReminderNotificationHelper
+import android.Manifest
+import android.content.pm.PackageManager
+import android.os.Build
+import androidx.core.app.ActivityCompat
+import androidx.core.content.ContextCompat
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
-        FirebaseSyncManager.init(this)
-        ReminderNotificationHelper.createNotificationChannel(this)
+        try {
+            FirebaseSyncManager.init(this)
+            ReminderNotificationHelper.createNotificationChannel(this)
+
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                if (ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
+                    ActivityCompat.requestPermissions(this, arrayOf(Manifest.permission.POST_NOTIFICATIONS), 101)
+                }
+            }
+        } catch (e: Exception) {
+            // Defensive protection against any initialization crash
+        }
 
         setContent {
             DentalClinicTheme {

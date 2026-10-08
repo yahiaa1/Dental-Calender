@@ -146,7 +146,7 @@ fun AddEditAppointmentScreen(
                             Toast.makeText(context, "يرجى كتابة رقم الهاتف", Toast.LENGTH_SHORT).show()
                             return@Button
                         }
-                        val priceVal = priceText.toDoubleOrNull() ?: 0.0
+                        val priceVal = com.example.utils.DateUtils.parsePrice(priceText)
                         val appointment = AppointmentEntity(
                             id = existingAppointment?.id ?: 0L,
                             patientId = selectedPatientId,

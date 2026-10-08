@@ -219,10 +219,12 @@ fun WhatsAppReminderSettingsScreen(
                                 appointmentId = 99999,
                                 patientName = "أحمد محمد (تجربة)",
                                 patientPhone = "01012345678",
+                                procedureName = "حشو تجميلي / عصب",
+                                price = 500.0,
                                 timeFormatted12 = "03:00 م",
                                 customMessage = messageText.replace("{اسم المريض}", "أحمد محمد").replace("{وقت الموعد}", "03:00 م")
                             )
-                            Toast.makeText(context, "تم إرسال إشعار التذكير التجريبي لجهازك!", Toast.LENGTH_SHORT).show()
+                            Toast.makeText(context, "تم إرسال إشعار التذكير التجريبي للهاتف بنجاح!", Toast.LENGTH_SHORT).show()
                         },
                         modifier = Modifier.fillMaxWidth().height(44.dp),
                         shape = RoundedCornerShape(10.dp)

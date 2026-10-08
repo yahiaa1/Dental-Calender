@@ -87,12 +87,111 @@ object DateUtils {
         return date.format(DateTimeFormatter.ISO_LOCAL_DATE) // YYYY-MM-DD
     }
 
-    fun parseDate(dateStr: String): LocalDate {
-        return try {
-            LocalDate.parse(dateStr, DateTimeFormatter.ISO_LOCAL_DATE)
-        } catch (e: Exception) {
-            LocalDate.now()
+    /**
+     * Normalizes date strings: converts Arabic numerals to western, slashes to dashes,
+     * trims whitespace, and ensures 2-digit padding for month and day.
+     */
+    fun normalizeDateString(dateStr: String): String {
+        val clean = dateStr.trim()
+            .replace('٠', '0')
+            .replace('١', '1')
+            .replace('٢', '2')
+            .replace('٣', '3')
+            .replace('٤', '4')
+            .replace('٥', '5')
+            .replace('٦', '6')
+            .replace('٧', '7')
+            .replace('٨', '8')
+            .replace('٩', '9')
+            .replace('/', '-')
+        val parts = clean.split("-")
+        if (parts.size == 3) {
+            val y = parts[0].toIntOrNull()
+            val m = parts[1].toIntOrNull()
+            val d = parts[2].toIntOrNull()
+            if (y != null && m != null && d != null) {
+                return String.format("%04d-%02d-%02d", y, m, d)
+            }
         }
+        return clean
+    }
+
+    fun parseDate(dateStr: String): LocalDate {
+        val normalized = normalizeDateString(dateStr)
+        return try {
+            LocalDate.parse(normalized, DateTimeFormatter.ISO_LOCAL_DATE)
+        } catch (e: Exception) {
+            try {
+                val parts = normalized.split("-")
+                if (parts.size == 3) {
+                    val y = parts[0].toInt()
+                    val m = parts[1].toInt()
+                    val d = parts[2].toInt()
+                    LocalDate.of(y, m, d)
+                } else {
+                    LocalDate.now()
+                }
+            } catch (ex: Exception) {
+                LocalDate.now()
+            }
+        }
+    }
+
+    fun isSameDay(dateStr: String, targetDate: LocalDate): Boolean {
+        val targetStr = toDateString(targetDate)
+        if (dateStr.trim() == targetStr) return true
+        val normalized = normalizeDateString(dateStr)
+        if (normalized == targetStr) return true
+        return try {
+            parseDate(dateStr) == targetDate
+        } catch (e: Exception) {
+            false
+        }
+    }
+
+    fun isSameWeek(dateStr: String, centerDate: LocalDate): Boolean {
+        return try {
+            val date = parseDate(dateStr)
+            val weekDays = getWeekDays(centerDate, hideDayOff = false, dayOff = null)
+            if (weekDays.isEmpty()) false
+            else !date.isBefore(weekDays.first()) && !date.isAfter(weekDays.last())
+        } catch (e: Exception) {
+            false
+        }
+    }
+
+    fun isSameMonth(dateStr: String, centerDate: LocalDate): Boolean {
+        return try {
+            val date = parseDate(dateStr)
+            date.year == centerDate.year && date.monthValue == centerDate.monthValue
+        } catch (e: Exception) {
+            false
+        }
+    }
+
+    /**
+     * Parses numeric prices safely, handling Arabic numerals, currency labels, and whitespace.
+     */
+    fun parsePrice(raw: String): Double {
+        val clean = raw.trim()
+            .replace('٠', '0')
+            .replace('١', '1')
+            .replace('٢', '2')
+            .replace('٣', '3')
+            .replace('٤', '4')
+            .replace('٥', '5')
+            .replace('٦', '6')
+            .replace('٧', '7')
+            .replace('٨', '8')
+            .replace('٩', '9')
+            .replace("ج.م", "")
+            .replace("جنيه", "")
+            .replace("ج", "")
+            .replace("EGP", "", ignoreCase = true)
+            .replace("LE", "", ignoreCase = true)
+            .replace(",", ".")
+            .replace(" ", "")
+        return clean.toDoubleOrNull() ?: 0.0
     }
 
     /**

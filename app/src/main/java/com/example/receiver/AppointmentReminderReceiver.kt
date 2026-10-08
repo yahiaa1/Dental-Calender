@@ -3,6 +3,7 @@ package com.example.receiver
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import android.os.PowerManager
 import com.example.utils.ReminderNotificationHelper
 import com.example.utils.TimeFormatter
 import kotlinx.coroutines.CoroutineScope
@@ -17,18 +18,35 @@ class AppointmentReminderReceiver : BroadcastReceiver() {
         val appointmentId = intent.getLongExtra("appointment_id", 0L)
         val patientName = intent.getStringExtra("patient_name") ?: "المريض"
         val patientPhone = intent.getStringExtra("patient_phone") ?: ""
+        val procedureName = intent.getStringExtra("procedure_name") ?: "كشف / استشارة"
+        val price = intent.getDoubleExtra("price", 0.0)
         val startTime = intent.getStringExtra("start_time") ?: ""
         val defaultMessage = intent.getStringExtra("custom_message") ?: "نذكرك بموعدك في عيادة الأسنان بعد ساعة في تمام $startTime"
         val whatsappApiUrl = intent.getStringExtra("whatsapp_api_url") ?: ""
 
         val time12 = TimeFormatter.format12Hour(startTime)
 
-        // 1. Show local heads-up notification with WhatsApp action button
+        // Wake screen if phone is locked so notification appears immediately
+        try {
+            val powerManager = context.getSystemService(Context.POWER_SERVICE) as? PowerManager
+            @Suppress("DEPRECATION")
+            val wakeLock = powerManager?.newWakeLock(
+                PowerManager.SCREEN_BRIGHT_WAKE_LOCK or PowerManager.ACQUIRE_CAUSES_WAKEUP,
+                "DentalClinic:ReminderWakeLock"
+            )
+            wakeLock?.acquire(3000L)
+        } catch (e: Exception) {
+            // Ignore if permission not allowed
+        }
+
+        // 1. Show local heads-up lockscreen notification with avatar, procedure & price
         ReminderNotificationHelper.showOneHourReminderNotification(
             context = context,
             appointmentId = appointmentId,
             patientName = patientName,
             patientPhone = patientPhone,
+            procedureName = procedureName,
+            price = price,
             timeFormatted12 = time12,
             customMessage = defaultMessage
         )
@@ -47,6 +65,8 @@ class AppointmentReminderReceiver : BroadcastReceiver() {
                         {
                             "to": "$patientPhone",
                             "patient": "$patientName",
+                            "procedure": "$procedureName",
+                            "price": $price,
                             "time": "$time12",
                             "message": "$defaultMessage"
                         }
