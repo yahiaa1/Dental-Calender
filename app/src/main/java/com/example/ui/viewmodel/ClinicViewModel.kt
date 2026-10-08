@@ -199,28 +199,28 @@ class ClinicViewModel(application: Application) : AndroidViewModel(application) 
     // User & Staff Management State
     val allUsers: StateFlow<List<UserEntity>> = repository.allUsers
         .flowOn(Dispatchers.IO)
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+        .stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
 
     val currentUser = MutableStateFlow(
         UserEntity(1, "د. محمد (أدمن)", "01000000001", UserRole.ADMIN, username = "admin", password = "1234655")
     )
 
-    // Data streams from Room
+    // Data streams from Room (Kept hot in memory for instantaneous rendering)
     val allAppointments: StateFlow<List<AppointmentEntity>> = repository.allAppointments
         .flowOn(Dispatchers.IO)
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+        .stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
 
     val allPatients: StateFlow<List<PatientEntity>> = repository.allPatients
         .flowOn(Dispatchers.IO)
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+        .stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
 
     val allProcedures: StateFlow<List<ProcedureConfigEntity>> = repository.allProcedures
         .flowOn(Dispatchers.IO)
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+        .stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
 
     val allTemplates: StateFlow<List<WhatsAppTemplateEntity>> = repository.allTemplates
         .flowOn(Dispatchers.IO)
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+        .stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
 
     val calendarVisibleAppointments: StateFlow<List<AppointmentEntity>> = combine(
         allAppointments,
@@ -244,17 +244,17 @@ class ClinicViewModel(application: Application) : AndroidViewModel(application) 
             matchQuery && matchProcedure && matchStatus && matchClass
         }
     }.flowOn(Dispatchers.IO)
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+        .stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
 
     val monthAppointmentDots: StateFlow<Map<String, List<AppointmentStatus>>> = calendarVisibleAppointments
         .map { list -> list.groupBy({ it.dateStr }, { it.status }) }
         .flowOn(Dispatchers.IO)
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyMap())
+        .stateIn(viewModelScope, SharingStarted.Eagerly, emptyMap())
 
     val procedureColorsMap: StateFlow<Map<String, String>> = allProcedures
         .map { list -> list.associate { it.name to it.colorHex } }
         .flowOn(Dispatchers.IO)
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyMap())
+        .stateIn(viewModelScope, SharingStarted.Eagerly, emptyMap())
 
     // Login Method:
     // "اليوزر بتاع الadmin يكون ثابت ك admin والباسورد 1234655"

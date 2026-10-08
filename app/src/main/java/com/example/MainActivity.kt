@@ -8,7 +8,10 @@ import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -16,8 +19,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.LayoutDirection
+import com.example.ui.theme.ClinicPrimary
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.data.firebase.FirebaseSyncManager
@@ -182,23 +188,23 @@ fun DentalClinicApp(
 
     Scaffold(
         modifier = Modifier.fillMaxSize(),
-        bottomBar = {
-            if (isRootTab && !isFilterSheetVisible) {
-                AppBottomBar(
-                    selectedIndex = bottomNavIndex,
-                    onItemSelected = { index ->
-                        // Settings Protection:
-                        // "لايمكن دخول الاعدادات الا من يوزر admin فقط"
-                        if (index == 3 && currentUser.role != UserRole.ADMIN) {
-                            showAdminOnlyAlert = true
-                        } else {
-                            viewModel.setBottomNavIndex(index)
-                        }
-                    },
-                    onFabClicked = {
-                        viewModel.openAddAppointment()
-                    }
-                )
+        floatingActionButton = {
+            if (currentScreen is ClinicScreen.MainCalendar && !isFilterSheetVisible) {
+                FloatingActionButton(
+                    onClick = { viewModel.openAddAppointment() },
+                    containerColor = ClinicPrimary,
+                    contentColor = Color.White,
+                    shape = RoundedCornerShape(16.dp),
+                    modifier = Modifier
+                        .padding(bottom = 8.dp)
+                        .testTag("google_calendar_fab_add")
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Add,
+                        contentDescription = "إضافة موعد جديد",
+                        modifier = Modifier.size(28.dp)
+                    )
+                }
             }
         }
     ) { innerPadding ->
@@ -241,21 +247,29 @@ fun DentalClinicApp(
                             viewModel.moveAppointment(app, date, start, end)
                         },
                         onOpenFilter = { viewModel.isFilterSheetVisible.value = true },
-                        onOpenNotionSync = { viewModel.navigateTo(ClinicScreen.NotionCalendarSync) }
+                        onOpenNotionSync = { viewModel.navigateTo(ClinicScreen.NotionCalendarSync) },
+                        onNavigateToPatients = { viewModel.navigateTo(ClinicScreen.PatientsList) },
+                        onNavigateToReports = { viewModel.navigateTo(ClinicScreen.Reports) },
+                        onNavigateToSettings = {
+                            if (currentUser.role != UserRole.ADMIN) {
+                                showAdminOnlyAlert = true
+                            } else {
+                                viewModel.navigateTo(ClinicScreen.Settings)
+                            }
+                        }
                     )
                 }
 
                 is ClinicScreen.PatientsList -> {
-                    BackHandler { viewModel.setBottomNavIndex(0) }
+                    BackHandler { viewModel.navigateTo(ClinicScreen.MainCalendar) }
                     PatientsListScreen(
                         patients = allPatients,
                         onPatientClick = { patient ->
-                            // Open patient profile & history instead of booking directly!
-                            // "لما بشوف المريض من المرضى واضغط عليه بيجيب المواعيد علطول اني احجز مفروض اخش عليه واشوف بياناته"
                             viewModel.openPatientDetails(patient)
                         },
                         onWhatsAppClick = { viewModel.sendPatientWhatsApp(context, it) },
-                        onAddNewPatient = { viewModel.savePatient(it) }
+                        onAddNewPatient = { viewModel.savePatient(it) },
+                        onBack = { viewModel.navigateTo(ClinicScreen.MainCalendar) }
                     )
                 }
 
@@ -286,22 +300,23 @@ fun DentalClinicApp(
                 }
 
                 is ClinicScreen.Reports -> {
-                    BackHandler { viewModel.setBottomNavIndex(0) }
+                    BackHandler { viewModel.navigateTo(ClinicScreen.MainCalendar) }
                     ReportsScreen(
                         appointments = allAppointments,
                         patients = allPatients,
                         selectedReportDate = reportsSelectedDate,
-                        onSelectReportDate = { viewModel.setReportsSelectedDate(it) }
+                        onSelectReportDate = { viewModel.setReportsSelectedDate(it) },
+                        onBack = { viewModel.navigateTo(ClinicScreen.MainCalendar) }
                     )
                 }
 
                 is ClinicScreen.Settings -> {
-                    BackHandler { viewModel.setBottomNavIndex(0) }
+                    BackHandler { viewModel.navigateTo(ClinicScreen.MainCalendar) }
                     // Extra security check for settings screen
                     if (currentUser.role != UserRole.ADMIN) {
                         LaunchedEffect(Unit) {
                             showAdminOnlyAlert = true
-                            viewModel.setBottomNavIndex(0)
+                            viewModel.navigateTo(ClinicScreen.MainCalendar)
                         }
                     } else {
                         ClinicSettingsScreen(
@@ -320,7 +335,8 @@ fun DentalClinicApp(
                             onOpenUsersManagement = { viewModel.navigateTo(ClinicScreen.UserManagement) },
                             onOpenWhatsAppReminders = { viewModel.navigateTo(ClinicScreen.WhatsAppReminderSettings) },
                             onClearAllAppointments = { viewModel.clearAllAppointments() },
-                            onClearAllPatients = { viewModel.clearAllPatients() }
+                            onClearAllPatients = { viewModel.clearAllPatients() },
+                            onBack = { viewModel.navigateTo(ClinicScreen.MainCalendar) }
                         )
                     }
                 }

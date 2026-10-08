@@ -45,6 +45,7 @@ fun ReportsScreen(
     patients: List<PatientEntity>,
     selectedReportDate: LocalDate,
     onSelectReportDate: (LocalDate) -> Unit,
+    onBack: (() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
@@ -118,18 +119,30 @@ fun ReportsScreen(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Column {
-                    Text(
-                        text = "التقارير والإيرادات",
-                        fontSize = 18.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = Color(0xFF263238)
-                    )
-                    Text(
-                        text = "متابعة التارجت اليومي والمحصل الفعلي",
-                        fontSize = 11.sp,
-                        color = Color(0xFF78909C)
-                    )
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    if (onBack != null) {
+                        IconButton(onClick = onBack, modifier = Modifier.size(36.dp)) {
+                            Icon(
+                                imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                                contentDescription = "رجوع",
+                                tint = Color(0xFF37474F)
+                            )
+                        }
+                        Spacer(modifier = Modifier.width(6.dp))
+                    }
+                    Column {
+                        Text(
+                            text = "التقارير والإيرادات",
+                            fontSize = 18.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Color(0xFF263238)
+                        )
+                        Text(
+                            text = "متابعة التارجت اليومي والمحصل الفعلي",
+                            fontSize = 11.sp,
+                            color = Color(0xFF78909C)
+                        )
+                    }
                 }
 
                 // Share Report Button

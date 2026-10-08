@@ -111,6 +111,9 @@ fun ProportionalTimelineView(
     // Anchor base date: 2026-01-03 is Saturday (Week starts Saturday -> Friday)
     val baseAnchorDate = remember { LocalDate.of(2026, 1, 3) }
 
+    // Pre-group appointments by date for instantaneous O(1) rendering during scroll & pager gestures
+    val appointmentsByDate = remember(appointments) { appointments.groupBy { it.dateStr } }
+
     val allWeekDays = remember {
         listOf(
             DayOfWeek.SATURDAY, DayOfWeek.SUNDAY, DayOfWeek.MONDAY,
@@ -334,33 +337,7 @@ fun ProportionalTimelineView(
             .fillMaxSize()
             .background(Color.White)
     ) {
-        // Zoom presets bar
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 12.dp, vertical = 4.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(4.dp)
-            ) {
-                Text(text = "مستوى التكبير:", fontSize = 11.sp, color = Color(0xFF757575), fontWeight = FontWeight.Medium)
-                ZoomPresetPill("عادي", isSelected = hourHeightDp in 80f..95f) { onZoomChange(85f) }
-                ZoomPresetPill("مريح", isSelected = hourHeightDp in 96f..120f) { onZoomChange(110f) }
-                ZoomPresetPill("مفصل", isSelected = hourHeightDp > 120f) { onZoomChange(140f) }
-            }
 
-            Text(
-                text = "💡 اسحب بإصبعك لتحديد وقت الحجز • اسحب مطولاً على موعد لنقله",
-                fontSize = 10.sp,
-                color = ClinicPrimary,
-                fontWeight = FontWeight.Medium
-            )
-        }
-
-        HorizontalDivider(thickness = 1.dp, color = Color(0xFFE0E0E0))
 
         // Interactive Move Mode Floating Control Bar
         // Allows moving the appointment to ANY DAY or TIME with live buttons and calendar picker!
@@ -589,7 +566,7 @@ fun ProportionalTimelineView(
                     ) {
                         datesInThisPage.forEach { date ->
                             val dateStr = DateUtils.toDateString(date)
-                            val dayAppointments = appointments.filter { it.dateStr == dateStr }
+                            val dayAppointments = appointmentsByDate[dateStr] ?: emptyList()
 
                             Box(modifier = Modifier.weight(1f)) {
                                 DayColumnSlot(
