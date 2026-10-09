@@ -809,68 +809,76 @@ class ClinicViewModel(application: Application) : AndroidViewModel(application) 
 
     fun saveWhatsAppTemplate(template: WhatsAppTemplateEntity) {
         viewModelScope.launch(Dispatchers.IO) {
-            val finalId = if (template.id == 0L) FirebaseSyncManager.generateUniqueId() else template.id
+            val existing = repository.getTemplateByCategory(template.category)
+            val finalId = if (template.id > 0L) {
+                template.id
+            } else if (existing != null && existing.id > 0L) {
+                existing.id
+            } else {
+                FirebaseSyncManager.generateUniqueId()
+            }
             val finalTemplate = template.copy(id = finalId)
-            repository.updateTemplate(finalTemplate)
+            repository.saveTemplate(finalTemplate)
             FirebaseSyncManager.autoSyncWhatsAppTemplate(finalTemplate)
         }
     }
 
-    fun sendOneHourWhatsAppReminder(context: Context, appointment: AppointmentEntity) {
-        viewModelScope.launch(Dispatchers.IO) {
-            val template = repository.getTemplateByCategory(WhatsAppTemplateCategory.ONE_HOUR_BEFORE)
-            val templateText = template?.messageText
-                ?: "مرحباً {اسم المريض} ⏰ نذكرك بموعدك في عيادة الأسنان بعد ساعة في تمام {وقت الموعد}. نحن بانتظارك!"
-            val time12 = TimeFormatter.format12Hour(appointment.startTime)
-            val message = templateText
-                .replace("{اسم المريض}", appointment.patientName)
-                .replace("{وقت الموعد}", time12)
-                .replace("{تاريخ الموعد}", appointment.dateStr)
-                .replace("{اسم العيادة}", "عيادة الأسنان")
+    fun getDefaultTemplateText(category: WhatsAppTemplateCategory): String {
+        return when (category) {
+            WhatsAppTemplateCategory.ONE_HOUR_BEFORE ->
+                "مرحباً {اسم المريض} ⏰ نذكرك بموعدك في عيادة الأسنان بعد ساعة في تمام {وقت الموعد}. نحن في انتظار زيارتك!"
+            WhatsAppTemplateCategory.BEFORE_APPOINTMENT ->
+                "مرحبا {اسم المريض} 🌟\nنذكرك بموعدك في {تاريخ الموعد} الساعة {وقت الموعد} في عيادة {اسم العيادة}.\nفي حالة عدم الحضور يرجى إبلاغنا مسبقاً.\nشكراً لك 🌟"
+            WhatsAppTemplateCategory.AFTER_TREATMENT ->
+                "أهلاً {اسم المريض} 🌸\nنتمنى لك دوام الصحة والعافية بعد زيارتك لعيادة {اسم العيادة} اليوم.\nيرجى اتباع إرشادات الطبيب والتواصل معنا في حال حدوث أي استفسار.\nمع تمنياتنا لك بابتسامة مشرقة! ✨"
+            WhatsAppTemplateCategory.CONFIRMATION ->
+                "مرحباً {اسم المريض} ✅\nتم تأكيد حجز موعدك بنجاح في عيادة {اسم العيادة}.\nالتاريخ: {تاريخ الموعد}\nالوقت: {وقت الموعد}\nنتشرف بزيارتك ويسعدنا تقديم أفضل رعاية لك."
+            WhatsAppTemplateCategory.CANCELLATION ->
+                "عزيزنا {اسم المريض} ⚠️\nنود إفادتك بأنه تم إلغاء موعدك المحدد بتاريخ {تاريخ الموعد} الساعة {وقت الموعد} في عيادة {اسم العيادة}.\nلتحديد موعد بديل يناسبك، نسعد بتواصلك معنا في أي وقت."
+        }
+    }
 
+    fun formatWhatsAppMessage(templateText: String, appointment: AppointmentEntity): String {
+        val dateFormatted = DateUtils.formatArabicFullDate(DateUtils.parseDate(appointment.dateStr))
+        val time12 = TimeFormatter.format12Hour(appointment.startTime)
+        return templateText
+            .replace("{اسم المريض}", appointment.patientName)
+            .replace("{تاريخ الموعد}", dateFormatted)
+            .replace("{وقت الموعد}", time12)
+            .replace("{اسم العيادة}", "عيادة الأسنان")
+            .replace("{اسم الإجراء}", appointment.procedureName)
+            .replace("{نوع الإجراء}", appointment.procedureName)
+    }
+
+    fun sendWhatsAppTemplate(
+        context: Context,
+        appointment: AppointmentEntity,
+        category: WhatsAppTemplateCategory
+    ) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val template = repository.getTemplateByCategory(category)
+            val templateText = template?.messageText?.takeIf { it.isNotBlank() } ?: getDefaultTemplateText(category)
+            val message = formatWhatsAppMessage(templateText, appointment)
             launch(Dispatchers.Main) {
                 ClinicActions.openWhatsApp(context, appointment.patientPhone, message)
             }
         }
     }
 
-    fun sendAppointmentWhatsApp(context: Context, appointment: AppointmentEntity, category: WhatsAppTemplateCategory = WhatsAppTemplateCategory.BEFORE_APPOINTMENT) {
-        viewModelScope.launch(Dispatchers.IO) {
-            val template = repository.getTemplateByCategory(category)
-            val templateText = template?.messageText ?: "مرحبا {اسم المريض}، نذكرك بموعدك في {تاريخ الموعد} الساعة {وقت الموعد}."
-            val dateFormatted = DateUtils.formatArabicFullDate(DateUtils.parseDate(appointment.dateStr))
-            val time12 = TimeFormatter.format12Hour(appointment.startTime)
-            val message = templateText
-                .replace("{اسم المريض}", appointment.patientName)
-                .replace("{تاريخ الموعد}", dateFormatted)
-                .replace("{وقت الموعد}", time12)
-                .replace("{اسم العيادة}", "عيادة الأسنان")
+    fun sendOneHourWhatsAppReminder(context: Context, appointment: AppointmentEntity) {
+        sendWhatsAppTemplate(context, appointment, WhatsAppTemplateCategory.ONE_HOUR_BEFORE)
+    }
 
-            launch(Dispatchers.Main) {
-                ClinicActions.openWhatsApp(context, appointment.patientPhone, message)
-            }
-        }
+    fun sendAppointmentWhatsApp(
+        context: Context,
+        appointment: AppointmentEntity,
+        category: WhatsAppTemplateCategory = WhatsAppTemplateCategory.BEFORE_APPOINTMENT
+    ) {
+        sendWhatsAppTemplate(context, appointment, category)
     }
 
     fun sendPostTreatmentWhatsApp(context: Context, appointment: AppointmentEntity) {
-        viewModelScope.launch(Dispatchers.IO) {
-            val template = repository.getTemplateByCategory(WhatsAppTemplateCategory.AFTER_TREATMENT)
-            val templateText = template?.messageText
-                ?: "أهلاً {اسم المريض} 🌸\nنتمنى لك دوام الصحة والعافية بعد زيارتك لعيادة {اسم العيادة} اليوم.\nيرجى اتباع إرشادات الطبيب والتواصل معنا في حال حدوث أي استفسار.\nمع تمنياتنا لك بابتسامة مشرقة! ✨"
-            val dateFormatted = DateUtils.formatArabicFullDate(DateUtils.parseDate(appointment.dateStr))
-            val time12 = TimeFormatter.format12Hour(appointment.startTime)
-            val message = templateText
-                .replace("{اسم المريض}", appointment.patientName)
-                .replace("{تاريخ الموعد}", dateFormatted)
-                .replace("{وقت الموعد}", time12)
-                .replace("{اسم العيادة}", "عيادة الأسنان")
-                .replace("{اسم الإجراء}", appointment.procedureName)
-                .replace("{نوع الإجراء}", appointment.procedureName)
-
-            launch(Dispatchers.Main) {
-                ClinicActions.openWhatsApp(context, appointment.patientPhone, message)
-            }
-        }
+        sendWhatsAppTemplate(context, appointment, WhatsAppTemplateCategory.AFTER_TREATMENT)
     }
 
     fun sendPatientWhatsApp(context: Context, patient: PatientEntity) {

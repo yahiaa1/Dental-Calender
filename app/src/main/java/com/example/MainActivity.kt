@@ -349,6 +349,7 @@ fun DentalClinicApp(
                         AppointmentDetailsScreen(
                             appointment = app,
                             currentUser = currentUser,
+                            templates = allTemplates,
                             onBack = { viewModel.navigateTo(ClinicScreen.MainCalendar) },
                             onEdit = { viewModel.openEditAppointment(app) },
                             onDelete = {
@@ -369,6 +370,9 @@ fun DentalClinicApp(
                             },
                             onSendPostTreatmentReminder = {
                                 viewModel.sendPostTreatmentWhatsApp(context, app)
+                            },
+                            onSendWhatsAppTemplate = { category ->
+                                viewModel.sendWhatsAppTemplate(context, app, category)
                             }
                         )
                     } else {

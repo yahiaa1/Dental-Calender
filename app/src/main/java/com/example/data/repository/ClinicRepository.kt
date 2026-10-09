@@ -61,6 +61,8 @@ class ClinicRepository(
         whatsappTemplateDao.getTemplateByCategory(category)
     suspend fun updateTemplate(template: WhatsAppTemplateEntity) =
         whatsappTemplateDao.updateTemplate(template)
+    suspend fun saveTemplate(template: WhatsAppTemplateEntity) =
+        whatsappTemplateDao.insertTemplate(template)
 
     // Action Logs (Audit Trail)
     val allActionLogs: Flow<List<ActionLogEntity>> = actionLogDao.getAllLogs()

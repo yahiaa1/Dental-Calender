@@ -22,6 +22,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -30,6 +32,8 @@ import com.example.data.model.AppointmentStatus
 import com.example.data.model.PatientClassification
 import com.example.data.model.UserEntity
 import com.example.data.model.UserRole
+import com.example.data.model.WhatsAppTemplateCategory
+import com.example.data.model.WhatsAppTemplateEntity
 import com.example.ui.components.ClassificationBadge
 import com.example.ui.components.StatusBadge
 import com.example.ui.components.WhatsAppButton
@@ -42,6 +46,7 @@ import com.example.utils.TimeFormatter
 fun AppointmentDetailsScreen(
     appointment: AppointmentEntity,
     currentUser: UserEntity,
+    templates: List<WhatsAppTemplateEntity> = emptyList(),
     onBack: () -> Unit,
     onEdit: () -> Unit,
     onDelete: () -> Unit,
@@ -50,10 +55,12 @@ fun AppointmentDetailsScreen(
     onOpenClassificationGuide: () -> Unit,
     onSendOneHourReminder: () -> Unit,
     onSendPostTreatmentReminder: () -> Unit = {},
+    onSendWhatsAppTemplate: (WhatsAppTemplateCategory) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     BackHandler { onBack() }
     val context = LocalContext.current
+    val clipboardManager = LocalClipboardManager.current
     var selectedTab by remember { mutableStateOf(0) }
     var showCancelOrDeleteDialog by remember { mutableStateOf(false) }
     var showPermissionDeniedDialog by remember { mutableStateOf(false) }
@@ -251,11 +258,9 @@ fun AppointmentDetailsScreen(
                         WhatsAppButton(
                             onClick = {
                                 if (appointment.status == AppointmentStatus.COMPLETED) {
-                                    onSendPostTreatmentReminder()
+                                    onSendWhatsAppTemplate(WhatsAppTemplateCategory.AFTER_TREATMENT)
                                 } else {
-                                    val time12 = TimeFormatter.format12Hour(appointment.startTime)
-                                    val msg = "مرحباً ${appointment.patientName} 🌟، نذكرك بموعدك في عيادة الأسنان يوم $formattedDate الساعة $time12."
-                                    ClinicActions.openWhatsApp(context, appointment.patientPhone, msg)
+                                    onSendWhatsAppTemplate(WhatsAppTemplateCategory.BEFORE_APPOINTMENT)
                                 }
                             }
                         )
@@ -368,28 +373,28 @@ fun AppointmentDetailsScreen(
                 }
             }
 
-            // Tabs: [التفاصيل] [تاريخ المريض] [ملاحظات]
+            // Tabs: [التفاصيل] [رسائل واتساب] [تاريخ المريض] [الملاحظات]
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
                     .background(Color.White, RoundedCornerShape(10.dp))
                     .padding(4.dp)
             ) {
-                listOf("التفاصيل", "تاريخ المريض", "ملاحظات").forEachIndexed { index, tabTitle ->
+                listOf("التفاصيل", "رسائل واتساب", "تاريخ المريض", "الملاحظات").forEachIndexed { index, tabTitle ->
                     val isSelected = selectedTab == index
                     Box(
                         modifier = Modifier
                             .weight(1f)
-                            .height(36.dp)
+                            .height(38.dp)
                             .clip(RoundedCornerShape(8.dp))
-                            .background(if (isSelected) ClinicPrimary.copy(alpha = 0.1f) else Color.Transparent)
+                            .background(if (isSelected) ClinicPrimary.copy(alpha = 0.12f) else Color.Transparent)
                             .clickable { selectedTab = index },
                         contentAlignment = Alignment.Center
                     ) {
                         Text(
                             text = tabTitle,
                             color = if (isSelected) ClinicPrimary else Color(0xFF78909C),
-                            fontSize = 13.sp,
+                            fontSize = 12.sp,
                             fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium
                         )
                     }
@@ -494,6 +499,210 @@ fun AppointmentDetailsScreen(
                     }
                 }
                 1 -> {
+                    // WhatsApp Templates Tab
+                    Column(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        Card(
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(12.dp),
+                            colors = CardDefaults.cardColors(containerColor = Color.White),
+                            elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(14.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(42.dp)
+                                        .clip(CircleShape)
+                                        .background(WhatsAppGreen.copy(alpha = 0.12f)),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Chat,
+                                        contentDescription = null,
+                                        tint = WhatsAppGreen,
+                                        modifier = Modifier.size(22.dp)
+                                    )
+                                }
+                                Spacer(modifier = Modifier.width(12.dp))
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        text = "رسائل واتساب للمريض",
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 14.sp,
+                                        color = Color(0xFF263238)
+                                    )
+                                    Text(
+                                        text = "إرسال رسائل باستخدام القوالب المحفوظة مع تعويض بيانات المريض تلقائياً.",
+                                        fontSize = 11.5.sp,
+                                        color = Color(0xFF78909C)
+                                    )
+                                }
+                            }
+                        }
+
+                        val templateCategories = listOf(
+                            Triple(
+                                WhatsAppTemplateCategory.CONFIRMATION,
+                                Icons.Default.CheckCircle,
+                                Color(0xFF2E7D32)
+                            ),
+                            Triple(
+                                WhatsAppTemplateCategory.BEFORE_APPOINTMENT,
+                                Icons.Default.NotificationsActive,
+                                Color(0xFF0288D1)
+                            ),
+                            Triple(
+                                WhatsAppTemplateCategory.ONE_HOUR_BEFORE,
+                                Icons.Default.Schedule,
+                                Color(0xFFE65100)
+                            ),
+                            Triple(
+                                WhatsAppTemplateCategory.AFTER_TREATMENT,
+                                Icons.Default.Favorite,
+                                Color(0xFF7B1FA2)
+                            ),
+                            Triple(
+                                WhatsAppTemplateCategory.CANCELLATION,
+                                Icons.Default.Cancel,
+                                Color(0xFFD32F2F)
+                            )
+                        )
+
+                        templateCategories.forEach { (cat, icon, themeColor) ->
+                            val formattedMsg = getFormattedWhatsAppTemplate(cat, templates, appointment)
+                            Card(
+                                modifier = Modifier.fillMaxWidth(),
+                                shape = RoundedCornerShape(12.dp),
+                                colors = CardDefaults.cardColors(containerColor = Color.White),
+                                elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
+                            ) {
+                                Column(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(14.dp)
+                                ) {
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Row(verticalAlignment = Alignment.CenterVertically) {
+                                            Box(
+                                                modifier = Modifier
+                                                    .size(32.dp)
+                                                    .clip(RoundedCornerShape(8.dp))
+                                                    .background(themeColor.copy(alpha = 0.12f)),
+                                                contentAlignment = Alignment.Center
+                                            ) {
+                                                Icon(
+                                                    imageVector = icon,
+                                                    contentDescription = null,
+                                                    tint = themeColor,
+                                                    modifier = Modifier.size(18.dp)
+                                                )
+                                            }
+                                            Spacer(modifier = Modifier.width(8.dp))
+                                            Text(
+                                                text = cat.label,
+                                                fontSize = 14.sp,
+                                                fontWeight = FontWeight.Bold,
+                                                color = Color(0xFF263238)
+                                            )
+                                        }
+
+                                        Surface(
+                                            shape = RoundedCornerShape(6.dp),
+                                            color = themeColor.copy(alpha = 0.1f)
+                                        ) {
+                                            Text(
+                                                text = "قالب مخصص",
+                                                color = themeColor,
+                                                fontSize = 10.sp,
+                                                fontWeight = FontWeight.Bold,
+                                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                            )
+                                        }
+                                    }
+
+                                    Spacer(modifier = Modifier.height(10.dp))
+
+                                    Box(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .clip(RoundedCornerShape(8.dp))
+                                            .background(Color(0xFFF8F9FA))
+                                            .padding(10.dp)
+                                    ) {
+                                        Text(
+                                            text = formattedMsg,
+                                            fontSize = 12.sp,
+                                            color = Color(0xFF37474F),
+                                            lineHeight = 18.sp
+                                        )
+                                    }
+
+                                    Spacer(modifier = Modifier.height(12.dp))
+
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                    ) {
+                                        OutlinedButton(
+                                            onClick = {
+                                                clipboardManager.setText(AnnotatedString(formattedMsg))
+                                                Toast.makeText(context, "تم نسخ نص الرسالة", Toast.LENGTH_SHORT).show()
+                                            },
+                                            shape = RoundedCornerShape(8.dp),
+                                            modifier = Modifier.height(40.dp),
+                                            contentPadding = PaddingValues(horizontal = 10.dp)
+                                        ) {
+                                            Icon(
+                                                imageVector = Icons.Default.ContentCopy,
+                                                contentDescription = "نسخ",
+                                                modifier = Modifier.size(16.dp),
+                                                tint = Color(0xFF546E7A)
+                                            )
+                                            Spacer(modifier = Modifier.width(4.dp))
+                                            Text(text = "نسخ", fontSize = 11.5.sp, color = Color(0xFF546E7A))
+                                        }
+
+                                        Button(
+                                            onClick = { onSendWhatsAppTemplate(cat) },
+                                            modifier = Modifier
+                                                .weight(1f)
+                                                .height(40.dp),
+                                            shape = RoundedCornerShape(8.dp),
+                                            colors = ButtonDefaults.buttonColors(containerColor = WhatsAppGreen),
+                                            contentPadding = PaddingValues(horizontal = 12.dp)
+                                        ) {
+                                            Icon(
+                                                imageVector = Icons.Default.Send,
+                                                contentDescription = null,
+                                                modifier = Modifier.size(16.dp),
+                                                tint = Color.White
+                                            )
+                                            Spacer(modifier = Modifier.width(6.dp))
+                                            Text(
+                                                text = "إرسال عبر واتساب 💬",
+                                                fontSize = 12.5.sp,
+                                                fontWeight = FontWeight.Bold,
+                                                color = Color.White
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                2 -> {
                     Card(
                         modifier = Modifier.fillMaxWidth(),
                         shape = RoundedCornerShape(12.dp),
@@ -516,7 +725,7 @@ fun AppointmentDetailsScreen(
                         }
                     }
                 }
-                2 -> {
+                3 -> {
                     Card(
                         modifier = Modifier.fillMaxWidth(),
                         shape = RoundedCornerShape(12.dp),
@@ -530,6 +739,52 @@ fun AppointmentDetailsScreen(
                                 fontSize = 13.sp,
                                 color = Color(0xFF37474F)
                             )
+
+                            Spacer(modifier = Modifier.height(16.dp))
+                            HorizontalDivider(color = Color(0xFFECEFF1))
+                            Spacer(modifier = Modifier.height(12.dp))
+
+                            Text(
+                                text = "إرسال سريع عبر واتساب:",
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 13.sp,
+                                color = Color(0xFF546E7A)
+                            )
+                            Spacer(modifier = Modifier.height(8.dp))
+
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .horizontalScroll(rememberScrollState()),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                Button(
+                                    onClick = { onSendWhatsAppTemplate(WhatsAppTemplateCategory.CONFIRMATION) },
+                                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2E7D32)),
+                                    shape = RoundedCornerShape(8.dp),
+                                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp)
+                                ) {
+                                    Text("تأكيد الحجز ✅", fontSize = 11.5.sp)
+                                }
+
+                                Button(
+                                    onClick = { onSendWhatsAppTemplate(WhatsAppTemplateCategory.BEFORE_APPOINTMENT) },
+                                    colors = ButtonDefaults.buttonColors(containerColor = ClinicPrimary),
+                                    shape = RoundedCornerShape(8.dp),
+                                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp)
+                                ) {
+                                    Text("تذكير قبل الموعد 🌟", fontSize = 11.5.sp)
+                                }
+
+                                Button(
+                                    onClick = { onSendWhatsAppTemplate(WhatsAppTemplateCategory.CANCELLATION) },
+                                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFD32F2F)),
+                                    shape = RoundedCornerShape(8.dp),
+                                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp)
+                                ) {
+                                    Text("إلغاء الموعد ⚠️", fontSize = 11.5.sp)
+                                }
+                            }
                         }
                     }
                 }
@@ -629,4 +884,34 @@ private fun DetailItemRow(icon: ImageVector, title: String, value: String) {
         }
         Text(text = value, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = Color(0xFF263238))
     }
+}
+
+private fun getFormattedWhatsAppTemplate(
+    category: WhatsAppTemplateCategory,
+    templates: List<WhatsAppTemplateEntity>,
+    appointment: AppointmentEntity
+): String {
+    val template = templates.firstOrNull { it.category == category }
+    val defaultText = when (category) {
+        WhatsAppTemplateCategory.ONE_HOUR_BEFORE ->
+            "مرحباً {اسم المريض} ⏰ نذكرك بموعدك في عيادة الأسنان بعد ساعة في تمام {وقت الموعد}. نحن في انتظار زيارتك!"
+        WhatsAppTemplateCategory.BEFORE_APPOINTMENT ->
+            "مرحبا {اسم المريض} 🌟\nنذكرك بموعدك في {تاريخ الموعد} الساعة {وقت الموعد} في عيادة {اسم العيادة}.\nفي حالة عدم الحضور يرجى إبلاغنا مسبقاً.\nشكراً لك 🌟"
+        WhatsAppTemplateCategory.AFTER_TREATMENT ->
+            "أهلاً {اسم المريض} 🌸\nنتمنى لك دوام الصحة والعافية بعد زيارتك لعيادة {اسم العيادة} اليوم.\nيرجى اتباع إرشادات الطبيب والتواصل معنا في حال حدوث أي استفسار.\nمع تمنياتنا لك بابتسامة مشرقة! ✨"
+        WhatsAppTemplateCategory.CONFIRMATION ->
+            "مرحباً {اسم المريض} ✅\nتم تأكيد حجز موعدك بنجاح في عيادة {اسم العيادة}.\nالتاريخ: {تاريخ الموعد}\nالوقت: {وقت الموعد}\nنتشرف بزيارتك ويسعدنا تقديم أفضل رعاية لك."
+        WhatsAppTemplateCategory.CANCELLATION ->
+            "عزيزنا {اسم المريض} ⚠️\nنود إفادتك بأنه تم إلغاء موعدك المحدد بتاريخ {تاريخ الموعد} الساعة {وقت الموعد} في عيادة {اسم العيادة}.\nلتحديد موعد بديل يناسبك، نسعد بتواصلك معنا في أي وقت."
+    }
+    val rawText = template?.messageText?.takeIf { it.isNotBlank() } ?: defaultText
+    val formattedDate = DateUtils.formatArabicFullDate(DateUtils.parseDate(appointment.dateStr))
+    val time12 = TimeFormatter.format12Hour(appointment.startTime)
+    return rawText
+        .replace("{اسم المريض}", appointment.patientName)
+        .replace("{تاريخ الموعد}", formattedDate)
+        .replace("{وقت الموعد}", time12)
+        .replace("{اسم العيادة}", "عيادة الأسنان")
+        .replace("{اسم الإجراء}", appointment.procedureName)
+        .replace("{نوع الإجراء}", appointment.procedureName)
 }
