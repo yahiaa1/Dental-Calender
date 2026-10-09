@@ -95,17 +95,9 @@ class ClinicViewModel(application: Application) : AndroidViewModel(application) 
                 repository.insertUser(defaultAdmin)
                 FirebaseSyncManager.autoSyncUser(defaultAdmin)
             }
-            // Remove pre-registered sample accounts if present
-            val defaultReception = repository.getUserByUsername("reception")
-            if (defaultReception != null && (defaultReception.name.contains("موظف استقبال") || defaultReception.name.contains("أحمد"))) {
-                repository.deleteUser(defaultReception)
-                FirebaseSyncManager.autoDeleteUser(defaultReception.id)
-            }
-            val defaultNurse = repository.getUserByUsername("nurse")
-            if (defaultNurse != null && (defaultNurse.name.contains("مساعد تمريض") || defaultNurse.name.contains("سارة"))) {
-                repository.deleteUser(defaultNurse)
-                FirebaseSyncManager.autoDeleteUser(defaultNurse.id)
-            }
+
+            // Restore all users from Cloud Firestore to local DB immediately on app launch
+            FirebaseSyncManager.syncUsersFromFirebase(repository)
 
             // Restore saved logged-in user if available
             val savedUsername = authPrefs.getString("logged_in_username", null)
@@ -388,15 +380,18 @@ class ClinicViewModel(application: Application) : AndroidViewModel(application) 
 
     fun addUser(user: UserEntity) {
         viewModelScope.launch(Dispatchers.IO) {
-            val isNew = user.id == 0L
-            val finalId = if (isNew) FirebaseSyncManager.generateUniqueId() else user.id
-            val finalUser = user.copy(id = finalId)
-            FirebaseSyncManager.markLocalUpdate("user", finalId)
-            if (isNew) {
-                repository.insertUser(finalUser)
-            } else {
-                repository.updateUser(finalUser)
+            val existing = repository.getUserByUsername(user.username.trim().lowercase())
+            val finalId = when {
+                existing != null -> existing.id
+                user.id == 0L -> FirebaseSyncManager.generateUniqueId()
+                else -> user.id
             }
+            val finalUser = user.copy(
+                id = finalId,
+                username = user.username.trim().lowercase()
+            )
+            FirebaseSyncManager.markLocalUpdate("user", finalId)
+            repository.insertUser(finalUser)
             FirebaseSyncManager.autoSyncUser(finalUser)
         }
     }

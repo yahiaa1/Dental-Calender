@@ -413,6 +413,42 @@ object FirebaseSyncManager {
         }
     }
 
+    suspend fun syncUsersFromFirebase(repository: ClinicRepository) = withContext(Dispatchers.IO) {
+        try {
+            val db = getFirestore() ?: return@withContext
+            val snapshot = db.collection("clinic_users").get().await()
+            for (doc in snapshot.documents) {
+                val id = doc.safeLong("id") ?: doc.id.toLongOrNull() ?: continue
+                val name = doc.safeString("name")
+                val phone = doc.safeString("phone")
+                val roleStr = doc.safeString("role", UserRole.STAFF.name)
+                val role = try { UserRole.valueOf(roleStr) } catch (e: Exception) { UserRole.STAFF }
+                val username = doc.safeString("username")
+                val password = doc.safeString("password")
+                val deviceIdentifier = doc.safeString("deviceIdentifier")
+                val createdAt = doc.safeLong("createdAt") ?: System.currentTimeMillis()
+
+                if (name.isNotBlank() && username.isNotBlank()) {
+                    val user = UserEntity(
+                        id = id,
+                        name = name,
+                        phone = phone,
+                        role = role,
+                        username = username,
+                        password = password,
+                        deviceIdentifier = deviceIdentifier,
+                        createdAt = createdAt
+                    )
+                    repository.insertUser(user)
+                    markLocalUpdate("user", id, System.currentTimeMillis())
+                }
+            }
+            Log.d(TAG, "Successfully restored ${snapshot.size()} users from Firebase Firestore")
+        } catch (e: Exception) {
+            Log.w(TAG, "Error syncing users from Firebase: ${e.message}")
+        }
+    }
+
     // 4. Procedures Configuration Auto-Sync
     fun autoSyncProcedure(procedure: ProcedureConfigEntity) {
         val now = System.currentTimeMillis()
