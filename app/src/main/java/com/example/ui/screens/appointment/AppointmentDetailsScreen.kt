@@ -49,6 +49,7 @@ fun AppointmentDetailsScreen(
     onClassificationChange: (PatientClassification) -> Unit,
     onOpenClassificationGuide: () -> Unit,
     onSendOneHourReminder: () -> Unit,
+    onSendPostTreatmentReminder: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     BackHandler { onBack() }
@@ -56,6 +57,7 @@ fun AppointmentDetailsScreen(
     var selectedTab by remember { mutableStateOf(0) }
     var showCancelOrDeleteDialog by remember { mutableStateOf(false) }
     var showPermissionDeniedDialog by remember { mutableStateOf(false) }
+    var showPostTreatmentDialog by remember { mutableStateOf(false) }
 
     val formattedDate = remember(appointment.dateStr) {
         DateUtils.formatArabicFullDate(DateUtils.parseDate(appointment.dateStr))
@@ -111,6 +113,37 @@ fun AppointmentDetailsScreen(
                     }
                 ) {
                     Text("حذف نهائي", color = Color(0xFFD32F2F))
+                }
+            }
+        )
+    }
+
+    if (showPostTreatmentDialog) {
+        AlertDialog(
+            onDismissRequest = { showPostTreatmentDialog = false },
+            icon = { Icon(Icons.Default.CheckCircle, contentDescription = null, tint = WhatsAppGreen, modifier = Modifier.size(32.dp)) },
+            title = { Text("اكتمال الموعد", fontWeight = FontWeight.Bold) },
+            text = {
+                Text(
+                    "اكتمل العلاج للمريض '${appointment.patientName}'.\n\nهل ترغب في إرسال رسالة (قالب بعد العلاج) عبر واتساب الآن أم إرسالها لاحقاً؟"
+                )
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        showPostTreatmentDialog = false
+                        onSendPostTreatmentReminder()
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = WhatsAppGreen)
+                ) {
+                    Text("إرسال الآن 💬", fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = { showPostTreatmentDialog = false }
+                ) {
+                    Text("إرسال لاحقاً", color = Color(0xFF546E7A), fontWeight = FontWeight.Bold)
                 }
             }
         )
@@ -217,9 +250,13 @@ fun AppointmentDetailsScreen(
 
                         WhatsAppButton(
                             onClick = {
-                                val time12 = TimeFormatter.format12Hour(appointment.startTime)
-                                val msg = "مرحباً ${appointment.patientName} 🌟، نذكرك بموعدك في عيادة الأسنان يوم $formattedDate الساعة $time12."
-                                ClinicActions.openWhatsApp(context, appointment.patientPhone, msg)
+                                if (appointment.status == AppointmentStatus.COMPLETED) {
+                                    onSendPostTreatmentReminder()
+                                } else {
+                                    val time12 = TimeFormatter.format12Hour(appointment.startTime)
+                                    val msg = "مرحباً ${appointment.patientName} 🌟، نذكرك بموعدك في عيادة الأسنان يوم $formattedDate الساعة $time12."
+                                    ClinicActions.openWhatsApp(context, appointment.patientPhone, msg)
+                                }
                             }
                         )
                     }
@@ -291,6 +328,42 @@ fun AppointmentDetailsScreen(
                         contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp)
                     ) {
                         Text("إرسال الآن 💬", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                    }
+                }
+            }
+
+            // Post-Treatment WhatsApp Button (shown when completed to allow sending later)
+            if (appointment.status == AppointmentStatus.COMPLETED) {
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(12.dp),
+                    colors = CardDefaults.cardColors(containerColor = Color(0xFFE8F5E9)),
+                    elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(12.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Default.CheckCircle, contentDescription = null, tint = WhatsAppGreen, modifier = Modifier.size(24.dp))
+                            Spacer(modifier = Modifier.width(10.dp))
+                            Column {
+                                Text(text = "رسالة بعد العلاج", fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                                Text(text = "إرسال رسالة متابعة بعد العلاج للمريض عبر واتساب", fontSize = 11.sp, color = Color(0xFF388E3C))
+                            }
+                        }
+
+                        Button(
+                            onClick = onSendPostTreatmentReminder,
+                            colors = ButtonDefaults.buttonColors(containerColor = WhatsAppGreen),
+                            shape = RoundedCornerShape(8.dp),
+                            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp)
+                        ) {
+                            Text("إرسال الآن 💬", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                        }
                     }
                 }
             }
@@ -392,7 +465,12 @@ fun AppointmentDetailsScreen(
                                         Surface(
                                             shape = RoundedCornerShape(8.dp),
                                             color = if (isSelected) st.toComposeColor() else Color(0xFFECEFF1),
-                                            modifier = Modifier.clickable { onStatusChange(st) }
+                                            modifier = Modifier.clickable { 
+                                                onStatusChange(st)
+                                                if (st == AppointmentStatus.COMPLETED && appointment.status != AppointmentStatus.COMPLETED) {
+                                                    showPostTreatmentDialog = true
+                                                }
+                                            }
                                         ) {
                                             Text(
                                                 text = st.label,
@@ -510,6 +588,9 @@ fun AppointmentDetailsScreen(
                     onClick = {
                         val nextStatus = if (isOngoing) AppointmentStatus.COMPLETED else AppointmentStatus.IN_TREATMENT
                         onStatusChange(nextStatus)
+                        if (nextStatus == AppointmentStatus.COMPLETED) {
+                            showPostTreatmentDialog = true
+                        }
                     },
                     modifier = Modifier.weight(1.1f).height(46.dp).testTag("toggle_treatment_status_button"),
                     shape = RoundedCornerShape(10.dp),

@@ -366,6 +366,9 @@ fun DentalClinicApp(
                             },
                             onSendOneHourReminder = {
                                 viewModel.sendOneHourWhatsAppReminder(context, app)
+                            },
+                            onSendPostTreatmentReminder = {
+                                viewModel.sendPostTreatmentWhatsApp(context, app)
                             }
                         )
                     } else {

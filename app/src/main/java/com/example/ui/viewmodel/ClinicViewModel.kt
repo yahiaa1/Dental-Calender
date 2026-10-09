@@ -763,6 +763,27 @@ class ClinicViewModel(application: Application) : AndroidViewModel(application) 
         }
     }
 
+    fun sendPostTreatmentWhatsApp(context: Context, appointment: AppointmentEntity) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val template = repository.getTemplateByCategory(WhatsAppTemplateCategory.AFTER_TREATMENT)
+            val templateText = template?.messageText
+                ?: "أهلاً {اسم المريض} 🌸\nنتمنى لك دوام الصحة والعافية بعد زيارتك لعيادة {اسم العيادة} اليوم.\nيرجى اتباع إرشادات الطبيب والتواصل معنا في حال حدوث أي استفسار.\nمع تمنياتنا لك بابتسامة مشرقة! ✨"
+            val dateFormatted = DateUtils.formatArabicFullDate(DateUtils.parseDate(appointment.dateStr))
+            val time12 = TimeFormatter.format12Hour(appointment.startTime)
+            val message = templateText
+                .replace("{اسم المريض}", appointment.patientName)
+                .replace("{تاريخ الموعد}", dateFormatted)
+                .replace("{وقت الموعد}", time12)
+                .replace("{اسم العيادة}", "عيادة الأسنان")
+                .replace("{اسم الإجراء}", appointment.procedureName)
+                .replace("{نوع الإجراء}", appointment.procedureName)
+
+            launch(Dispatchers.Main) {
+                ClinicActions.openWhatsApp(context, appointment.patientPhone, message)
+            }
+        }
+    }
+
     fun sendPatientWhatsApp(context: Context, patient: PatientEntity) {
         val message = "مرحباً ${patient.name} 🌟، نتواصل معك من عيادة الأسنان. يسعدنا تقديم أفضل رعاية لك."
         ClinicActions.openWhatsApp(context, patient.phone, message)
