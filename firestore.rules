@@ -1,0 +1,70 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Helper functions for data integrity & validation
+    function hasValidId() {
+      return request.resource.data.id != null;
+    }
+
+    // 1. Clinic Appointments
+    match /clinic_appointments/{appointmentId} {
+      allow read: if true;
+      allow create, update: if hasValidId()
+                            && request.resource.data.patientName is string
+                            && request.resource.data.dateStr is string;
+      allow delete: if true;
+    }
+
+    // 2. Clinic Patients
+    match /clinic_patients/{patientId} {
+      allow read: if true;
+      allow create, update: if hasValidId()
+                            && request.resource.data.name is string;
+      allow delete: if true;
+    }
+
+    // 3. Clinic Staff / Users
+    match /clinic_users/{userId} {
+      allow read: if true;
+      allow create, update: if hasValidId()
+                            && request.resource.data.username is string;
+      allow delete: if true;
+    }
+
+    // 4. Clinic Procedures Configuration
+    match /clinic_procedures/{procedureId} {
+      allow read: if true;
+      allow create, update: if hasValidId()
+                            && request.resource.data.name is string;
+      allow delete: if true;
+    }
+
+    // 5. Clinic Action Logs / Audit Trail
+    match /clinic_action_logs/{logId} {
+      allow read: if true;
+      allow create, update: if hasValidId();
+      allow delete: if true;
+    }
+
+    // 6. Clinic Global Settings (Working Hours, Day Off)
+    match /clinic_settings/{settingId} {
+      allow read, write: if true;
+    }
+
+    // 7. Clinic WhatsApp Templates
+    match /clinic_whatsapp_templates/{templateId} {
+      allow read, write: if true;
+    }
+
+    // 8. Health check & Connection Test
+    match /_clinic_connection_test/{testDoc} {
+      allow read, write: if true;
+    }
+
+    // Default deny for all other paths
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

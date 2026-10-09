@@ -1,13 +1,13 @@
 {
   "project_info": {
-    "project_number": "372703224037",
-    "project_id": "dentalclinic-aistudio",
-    "storage_bucket": "dentalclinic-aistudio.appspot.com"
+    "project_number": "931136384586",
+    "project_id": "dental-calender-ef240",
+    "storage_bucket": "dental-calender-ef240.firebasestorage.app"
   },
   "client": [
     {
       "client_info": {
-        "mobilesdk_app_id": "1:372703224037:android:b20dfa19323c21a4f00123",
+        "mobilesdk_app_id": "1:931136384586:android:c3087ed03afcddea5f00b3",
         "android_client_info": {
           "package_name": "com.aistudio.dentalclinic.vpxkmz"
         }
@@ -15,7 +15,7 @@
       "oauth_client": [],
       "api_key": [
         {
-          "current_key": "AIzaSyB3XvK9mP4rL7qW2eY1zT0uI8oN6bV5c"
+          "current_key": "AIzaSyAwUFN0EVb99R7PUY_ZAZPblmx2yKAOQ5k"
         }
       ],
       "services": {

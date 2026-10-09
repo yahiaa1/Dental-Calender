@@ -18,7 +18,11 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import java.time.DayOfWeek
 import java.time.LocalDate
+import java.time.LocalDateTime
+import java.time.format.DateTimeFormatter
+import java.util.Locale
 
 sealed class ClinicScreen {
     object MainCalendar : ClinicScreen()
@@ -80,25 +84,27 @@ class ClinicViewModel(application: Application) : AndroidViewModel(application) 
         viewModelScope.launch(Dispatchers.IO) {
             val adminUser = repository.getUserByUsername("admin")
             if (adminUser == null) {
-                repository.insertUser(
-                    UserEntity(
-                        id = 1,
-                        name = "د. محمد (أدمن)",
-                        phone = "01000000001",
-                        role = UserRole.ADMIN,
-                        username = "admin",
-                        password = "1234655"
-                    )
+                val defaultAdmin = UserEntity(
+                    id = 1,
+                    name = "د. محمد (أدمن)",
+                    phone = "01000000001",
+                    role = UserRole.ADMIN,
+                    username = "admin",
+                    password = "1234655"
                 )
+                repository.insertUser(defaultAdmin)
+                FirebaseSyncManager.autoSyncUser(defaultAdmin)
             }
             // Remove pre-registered sample accounts if present
             val defaultReception = repository.getUserByUsername("reception")
             if (defaultReception != null && (defaultReception.name.contains("موظف استقبال") || defaultReception.name.contains("أحمد"))) {
                 repository.deleteUser(defaultReception)
+                FirebaseSyncManager.autoDeleteUser(defaultReception.id)
             }
             val defaultNurse = repository.getUserByUsername("nurse")
             if (defaultNurse != null && (defaultNurse.name.contains("مساعد تمريض") || defaultNurse.name.contains("سارة"))) {
                 repository.deleteUser(defaultNurse)
+                FirebaseSyncManager.autoDeleteUser(defaultNurse.id)
             }
 
             // Restore saved logged-in user if available
@@ -111,15 +117,25 @@ class ClinicViewModel(application: Application) : AndroidViewModel(application) 
             }
         }
 
-        // Realtime automatic sync across clinic devices via Firebase Firestore:
-        FirebaseSyncManager.startRealtimeAppointmentsListener(application) { remoteAppointments ->
-            viewModelScope.launch(Dispatchers.IO) {
-                for (remoteApp in remoteAppointments) {
-                    repository.insertAppointment(remoteApp)
-                }
-                TodayAppointmentsWidgetProvider.notifyDataChanged(application)
+        // Realtime automatic sync across all clinic devices for ALL entities (Appointments, Patients, Staff, Procedures, Action Logs, Settings, Templates) via Firebase Firestore:
+        FirebaseSyncManager.startAllRealtimeListeners(
+            application,
+            repository,
+            onSettingsChanged = { remoteStart, remoteEnd, remoteDayOff, remoteHideDayOff, remoteHideCancelled ->
+                workStartHour.value = remoteStart
+                workEndHour.value = remoteEnd
+                dayOff.value = remoteDayOff
+                hideDayOff.value = remoteHideDayOff
+                hideCancelledFromCalendar.value = remoteHideCancelled
+                settingsPrefs.edit()
+                    .putInt("work_start_hour", remoteStart)
+                    .putInt("work_end_hour", remoteEnd)
+                    .putString("day_off", remoteDayOff?.name ?: "NONE")
+                    .putBoolean("hide_day_off", remoteHideDayOff)
+                    .putBoolean("hide_cancelled", remoteHideCancelled)
+                    .apply()
             }
-        }
+        )
 
         // Automatically ensure upcoming appointments have alarms scheduled for 1 hour before
         viewModelScope.launch(Dispatchers.IO) {
@@ -139,9 +155,11 @@ class ClinicViewModel(application: Application) : AndroidViewModel(application) 
     val currentScreen = MutableStateFlow<ClinicScreen>(ClinicScreen.MainCalendar)
     val bottomNavIndex = MutableStateFlow(0) // 0=Calendar, 1=Patients, 2=Reports, 3=Settings
 
-    // Clinic Working Hours configuration
-    val workStartHour = MutableStateFlow(9) // 09:00
-    val workEndHour = MutableStateFlow(21)   // 21:00
+    private val settingsPrefs = application.getSharedPreferences("clinic_settings_prefs", Context.MODE_PRIVATE)
+
+    // Clinic Working Hours configuration: Persisted across app restarts
+    val workStartHour = MutableStateFlow(settingsPrefs.getInt("work_start_hour", 9)) // Default 09:00
+    val workEndHour = MutableStateFlow(settingsPrefs.getInt("work_end_hour", 21))    // Default 21:00
 
     // Zoom level: minimum boundary is 80f, max 160f
     val hourHeightDp = MutableStateFlow(85f)
@@ -149,21 +167,20 @@ class ClinicViewModel(application: Application) : AndroidViewModel(application) 
     // Option to hide cancelled appointments from calendar view
     val hideCancelledFromCalendar = MutableStateFlow(true)
 
-    private val settingsPrefs = application.getSharedPreferences("clinic_settings_prefs", Context.MODE_PRIVATE)
-
     // Day Off configuration: Default is FRIDAY
-    val dayOff = MutableStateFlow<java.time.DayOfWeek?>(
+    val dayOff = MutableStateFlow<DayOfWeek?>(
         settingsPrefs.getString("day_off", "FRIDAY")?.let {
-            if (it == "NONE") null else try { java.time.DayOfWeek.valueOf(it) } catch (e: Exception) { java.time.DayOfWeek.FRIDAY }
-        } ?: java.time.DayOfWeek.FRIDAY
+            if (it == "NONE") null else try { DayOfWeek.valueOf(it) } catch (e: Exception) { DayOfWeek.FRIDAY }
+        } ?: DayOfWeek.FRIDAY
     )
 
     // Option to hide/show the day off from calendar view
     val hideDayOff = MutableStateFlow(settingsPrefs.getBoolean("hide_day_off", false))
 
-    fun setDayOff(day: java.time.DayOfWeek?) {
+    fun setDayOff(day: DayOfWeek?) {
         dayOff.value = day
         settingsPrefs.edit().putString("day_off", day?.name ?: "NONE").apply()
+        syncClinicSettings()
     }
 
     fun toggleHideDayOff() {
@@ -173,6 +190,7 @@ class ClinicViewModel(application: Application) : AndroidViewModel(application) 
         if (next && dayOff.value != null && selectedDate.value.dayOfWeek == dayOff.value) {
             selectedDate.value = selectedDate.value.plusDays(1)
         }
+        syncClinicSettings()
     }
 
     fun setHideDayOff(hide: Boolean) {
@@ -181,6 +199,17 @@ class ClinicViewModel(application: Application) : AndroidViewModel(application) 
         if (hide && dayOff.value != null && selectedDate.value.dayOfWeek == dayOff.value) {
             selectedDate.value = selectedDate.value.plusDays(1)
         }
+        syncClinicSettings()
+    }
+
+    private fun syncClinicSettings() {
+        FirebaseSyncManager.autoSyncSettings(
+            workStartHour = workStartHour.value,
+            workEndHour = workEndHour.value,
+            dayOff = dayOff.value,
+            hideDayOff = hideDayOff.value,
+            hideCancelled = hideCancelledFromCalendar.value
+        )
     }
 
     // Reports selected date
@@ -263,8 +292,6 @@ class ClinicViewModel(application: Application) : AndroidViewModel(application) 
         .stateIn(viewModelScope, SharingStarted.Eagerly, emptyMap())
 
     // Login Method:
-    // "اليوزر بتاع الadmin يكون ثابت ك admin والباسورد 1234655"
-    // "وانا ال احدد اليوزر والباسورد لكل شخص"
     suspend fun attemptLogin(username: String, pass: String): UserEntity? {
         val cleanUsername = username.trim()
         val cleanPass = pass.trim()
@@ -282,6 +309,7 @@ class ClinicViewModel(application: Application) : AndroidViewModel(application) 
                     password = "1234655"
                 )
                 repository.insertUser(newAdmin)
+                FirebaseSyncManager.autoSyncUser(newAdmin)
                 admin = newAdmin
             }
             currentUser.value = admin
@@ -360,19 +388,31 @@ class ClinicViewModel(application: Application) : AndroidViewModel(application) 
 
     fun addUser(user: UserEntity) {
         viewModelScope.launch(Dispatchers.IO) {
-            repository.insertUser(user)
+            val isNew = user.id == 0L
+            val finalId = if (isNew) FirebaseSyncManager.generateUniqueId() else user.id
+            val finalUser = user.copy(id = finalId)
+            FirebaseSyncManager.markLocalUpdate("user", finalId)
+            if (isNew) {
+                repository.insertUser(finalUser)
+            } else {
+                repository.updateUser(finalUser)
+            }
+            FirebaseSyncManager.autoSyncUser(finalUser)
         }
     }
 
     fun updateUser(user: UserEntity) {
         viewModelScope.launch(Dispatchers.IO) {
+            FirebaseSyncManager.markLocalUpdate("user", user.id)
             repository.updateUser(user)
+            FirebaseSyncManager.autoSyncUser(user)
         }
     }
 
     fun deleteUser(userId: Long) {
         viewModelScope.launch(Dispatchers.IO) {
             repository.deleteUserById(userId)
+            FirebaseSyncManager.autoDeleteUser(userId)
         }
     }
 
@@ -384,11 +424,19 @@ class ClinicViewModel(application: Application) : AndroidViewModel(application) 
         if (start < end) {
             workStartHour.value = start
             workEndHour.value = end
+            settingsPrefs.edit()
+                .putInt("work_start_hour", start)
+                .putInt("work_end_hour", end)
+                .apply()
+            syncClinicSettings()
         }
     }
 
     fun toggleHideCancelled() {
-        hideCancelledFromCalendar.value = !hideCancelledFromCalendar.value
+        val next = !hideCancelledFromCalendar.value
+        hideCancelledFromCalendar.value = next
+        settingsPrefs.edit().putBoolean("hide_cancelled", next).apply()
+        syncClinicSettings()
     }
 
     fun setReportsSelectedDate(date: LocalDate) {
@@ -400,8 +448,6 @@ class ClinicViewModel(application: Application) : AndroidViewModel(application) 
         currentScreen.value = ClinicScreen.AppointmentDetails(appointment.id)
     }
 
-    // Patient Details navigation as requested:
-    // "لما بشوف المريض من المرضى واضغط عليه بيجيب المواعيد علطول اني احجز مفروض اخش عليه واشوف بياناته"
     fun openPatientDetails(patient: PatientEntity) {
         activePatient.value = patient
         currentScreen.value = ClinicScreen.PatientDetails(patient.id)
@@ -445,30 +491,37 @@ class ClinicViewModel(application: Application) : AndroidViewModel(application) 
 
             val finalPatientId = if (existingPatient != null) {
                 if (existingPatient.classification != appointment.patientClassification) {
-                    repository.updatePatient(existingPatient.copy(classification = appointment.patientClassification))
+                    val updatedP = existingPatient.copy(classification = appointment.patientClassification)
+                    FirebaseSyncManager.markLocalUpdate("patient", updatedP.id)
+                    repository.updatePatient(updatedP)
+                    FirebaseSyncManager.autoSyncPatient(updatedP)
                 }
                 existingPatient.id
             } else {
-                repository.insertPatient(
-                    PatientEntity(
-                        id = 0,
-                        name = appointment.patientName.trim(),
-                        phone = appointment.patientPhone.trim(),
-                        classification = appointment.patientClassification,
-                        notes = "تم تسجيله تلقائياً عند حجز الموعد: ${appointment.procedureName}"
-                    )
+                val newPatientId = FirebaseSyncManager.generateUniqueId()
+                val newP = PatientEntity(
+                    id = newPatientId,
+                    name = appointment.patientName.trim(),
+                    phone = appointment.patientPhone.trim(),
+                    classification = appointment.patientClassification,
+                    notes = "تم تسجيله تلقائياً عند حجز الموعد: ${appointment.procedureName}"
                 )
+                FirebaseSyncManager.markLocalUpdate("patient", newPatientId)
+                repository.insertPatient(newP)
+                FirebaseSyncManager.autoSyncPatient(newP)
+                newPatientId
             }
 
-            val updatedApp = appointment.copy(patientId = finalPatientId)
-            val isNew = updatedApp.id == 0L
-            val generatedId = if (isNew) {
-                repository.insertAppointment(updatedApp)
+            val isNew = appointment.id == 0L
+            val finalAppId = if (isNew) FirebaseSyncManager.generateUniqueId() else appointment.id
+            val finalSavedApp = appointment.copy(id = finalAppId, patientId = finalPatientId)
+
+            FirebaseSyncManager.markLocalUpdate("appointment", finalAppId)
+            if (isNew) {
+                repository.insertAppointment(finalSavedApp)
             } else {
-                repository.updateAppointment(updatedApp)
-                updatedApp.id
+                repository.updateAppointment(finalSavedApp)
             }
-            val finalSavedApp = updatedApp.copy(id = generatedId)
             activeAppointment.value = finalSavedApp
 
             if (isNew) {
@@ -520,6 +573,7 @@ class ClinicViewModel(application: Application) : AndroidViewModel(application) 
                 startTime = newStartTime,
                 endTime = newEndTime
             )
+            FirebaseSyncManager.markLocalUpdate("appointment", updated.id)
             repository.updateAppointment(updated)
             activeAppointment.value = updated
 
@@ -555,6 +609,7 @@ class ClinicViewModel(application: Application) : AndroidViewModel(application) 
     fun updateAppointmentStatus(appointmentId: Long, newStatus: AppointmentStatus) {
         viewModelScope.launch(Dispatchers.IO) {
             val oldApp = repository.getAppointmentById(appointmentId)
+            FirebaseSyncManager.markLocalUpdate("appointment", appointmentId)
             repository.updateAppointmentStatus(appointmentId, newStatus)
             val updated = repository.getAppointmentById(appointmentId)
             if (updated != null) {
@@ -601,13 +656,15 @@ class ClinicViewModel(application: Application) : AndroidViewModel(application) 
     ) {
         try {
             val user = currentUser.value
-            val now = java.time.LocalDateTime.now()
-            val timeFormatter = java.time.format.DateTimeFormatter.ofPattern("hh:mm a", java.util.Locale("ar"))
-            val dateFormatter = java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd")
+            val now = LocalDateTime.now()
+            val timeFormatter = DateTimeFormatter.ofPattern("hh:mm a", Locale("ar"))
+            val dateFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd")
             val timeStr = now.format(timeFormatter)
             val dateStr = now.format(dateFormatter)
 
+            val logId = FirebaseSyncManager.generateUniqueId()
             val log = ActionLogEntity(
+                id = logId,
                 dateStr = dateStr,
                 timeStr = timeStr,
                 actionType = actionType,
@@ -624,6 +681,7 @@ class ClinicViewModel(application: Application) : AndroidViewModel(application) 
                 extraInfo = extraInfo
             )
             repository.insertActionLog(log)
+            FirebaseSyncManager.autoSyncActionLog(log)
         } catch (e: Exception) {
             // Guard safely
         }
@@ -638,24 +696,29 @@ class ClinicViewModel(application: Application) : AndroidViewModel(application) 
     fun deleteActionLog(id: Long) {
         viewModelScope.launch(Dispatchers.IO) {
             repository.deleteActionLogById(id)
+            FirebaseSyncManager.autoDeleteActionLog(id)
         }
     }
 
     fun savePatient(patient: PatientEntity, onComplete: ((Long) -> Unit)? = null) {
         viewModelScope.launch(Dispatchers.IO) {
-            val id = if (patient.id == 0L) {
-                repository.insertPatient(patient)
+            val isNew = patient.id == 0L
+            val finalId = if (isNew) FirebaseSyncManager.generateUniqueId() else patient.id
+            val finalPatient = patient.copy(id = finalId)
+            FirebaseSyncManager.markLocalUpdate("patient", finalId)
+            if (isNew) {
+                repository.insertPatient(finalPatient)
             } else {
-                repository.updatePatient(patient)
-                patient.id
+                repository.updatePatient(finalPatient)
             }
-            FirebaseSyncManager.autoSyncPatient(patient.copy(id = id))
-            onComplete?.invoke(id)
+            FirebaseSyncManager.autoSyncPatient(finalPatient)
+            onComplete?.invoke(finalId)
         }
     }
 
     fun updatePatient(patient: PatientEntity) {
         viewModelScope.launch(Dispatchers.IO) {
+            FirebaseSyncManager.markLocalUpdate("patient", patient.id)
             repository.updatePatient(patient)
             FirebaseSyncManager.autoSyncPatient(patient)
             if (activePatient.value?.id == patient.id) {
@@ -664,21 +727,43 @@ class ClinicViewModel(application: Application) : AndroidViewModel(application) 
         }
     }
 
+    fun deletePatient(patient: PatientEntity) {
+        viewModelScope.launch(Dispatchers.IO) {
+            repository.deletePatient(patient)
+            FirebaseSyncManager.autoDeletePatient(patient.id)
+            if (activePatient.value?.id == patient.id) {
+                activePatient.value = null
+            }
+        }
+    }
+
     fun addProcedure(procedure: ProcedureConfigEntity) {
         viewModelScope.launch(Dispatchers.IO) {
-            repository.insertProcedure(procedure)
+            val isNew = procedure.id == 0L
+            val finalId = if (isNew) FirebaseSyncManager.generateUniqueId() else procedure.id
+            val finalProc = procedure.copy(id = finalId)
+            FirebaseSyncManager.markLocalUpdate("procedure", finalId)
+            if (isNew) {
+                repository.insertProcedure(finalProc)
+            } else {
+                repository.updateProcedure(finalProc)
+            }
+            FirebaseSyncManager.autoSyncProcedure(finalProc)
         }
     }
 
     fun updateProcedure(procedure: ProcedureConfigEntity) {
         viewModelScope.launch(Dispatchers.IO) {
+            FirebaseSyncManager.markLocalUpdate("procedure", procedure.id)
             repository.updateProcedure(procedure)
+            FirebaseSyncManager.autoSyncProcedure(procedure)
         }
     }
 
     fun deleteProcedure(procedureId: Long) {
         viewModelScope.launch(Dispatchers.IO) {
             repository.deleteProcedureById(procedureId)
+            FirebaseSyncManager.autoDeleteProcedure(procedureId)
         }
     }
 
@@ -688,6 +773,7 @@ class ClinicViewModel(application: Application) : AndroidViewModel(application) 
             if (patient != null) {
                 val updated = patient.copy(classification = classification)
                 repository.updatePatient(updated)
+                FirebaseSyncManager.autoSyncPatient(updated)
                 if (activePatient.value?.id == patientId) {
                     activePatient.value = updated
                 }
@@ -696,6 +782,7 @@ class ClinicViewModel(application: Application) : AndroidViewModel(application) 
                 if (app.patientId == patientId) {
                     val updated = app.copy(patientClassification = classification)
                     repository.updateAppointment(updated)
+                    FirebaseSyncManager.autoSyncAppointment(updated)
                     activeAppointment.value = updated
                 }
             }
@@ -718,12 +805,19 @@ class ClinicViewModel(application: Application) : AndroidViewModel(application) 
     fun updateProcedureColor(procedureName: String, colorHex: String) {
         viewModelScope.launch(Dispatchers.IO) {
             repository.updateProcedureColor(procedureName, colorHex)
+            val updated = repository.allProcedures.first().firstOrNull { it.name == procedureName }
+            if (updated != null) {
+                FirebaseSyncManager.autoSyncProcedure(updated)
+            }
         }
     }
 
     fun saveWhatsAppTemplate(template: WhatsAppTemplateEntity) {
         viewModelScope.launch(Dispatchers.IO) {
-            repository.updateTemplate(template)
+            val finalId = if (template.id == 0L) FirebaseSyncManager.generateUniqueId() else template.id
+            val finalTemplate = template.copy(id = finalId)
+            repository.updateTemplate(finalTemplate)
+            FirebaseSyncManager.autoSyncWhatsAppTemplate(finalTemplate)
         }
     }
 
@@ -803,7 +897,11 @@ class ClinicViewModel(application: Application) : AndroidViewModel(application) 
             firebaseSyncStatus.value = "جارِ رفع البيانات إلى Firebase Firestore..."
             val result = FirebaseSyncManager.backupDataToFirebase(
                 patients = allPatients.value,
-                appointments = allAppointments.value
+                appointments = allAppointments.value,
+                users = allUsers.value,
+                procedures = allProcedures.value,
+                actionLogs = allActionLogs.value,
+                templates = allTemplates.value
             )
             isFirebaseSyncing.value = false
             result.onSuccess { msg ->
@@ -820,11 +918,15 @@ class ClinicViewModel(application: Application) : AndroidViewModel(application) 
             firebaseSyncStatus.value = "جارِ استرجاع البيانات من Firebase Firestore..."
             val result = FirebaseSyncManager.restoreDataFromFirebase()
             isFirebaseSyncing.value = false
-            result.onSuccess { (patients, appointments) ->
-                for (p in patients) repository.insertPatient(p)
-                for (a in appointments) repository.insertAppointment(a)
+            result.onSuccess { data ->
+                for (p in data.patients) repository.insertPatient(p)
+                for (a in data.appointments) repository.insertAppointment(a)
+                for (u in data.users) repository.insertUser(u)
+                for (pr in data.procedures) repository.insertProcedure(pr)
+                for (l in data.actionLogs) repository.insertActionLog(l)
+                for (t in data.templates) repository.updateTemplate(t)
                 TodayAppointmentsWidgetProvider.notifyDataChanged(getApplication())
-                firebaseSyncStatus.value = "تم استرجاع ${patients.size} مريض و ${appointments.size} موعد بنجاح من Firebase!"
+                firebaseSyncStatus.value = "تم استرجاع البيانات بنجاح: ${data.patients.size} مريض، ${data.appointments.size} موعد، ${data.users.size} موظف، ${data.procedures.size} إجراء، ${data.actionLogs.size} سجل نشاط!"
             }.onFailure { err ->
                 firebaseSyncStatus.value = "فشل الاسترجاع: ${err.localizedMessage ?: "تحقق من الاتصال بالإنترنت"}"
             }
@@ -856,5 +958,10 @@ class ClinicViewModel(application: Application) : AndroidViewModel(application) 
     fun resetFilter() {
         filterState.value = FilterState()
         isFilterSheetVisible.value = false
+    }
+
+    override fun onCleared() {
+        super.onCleared()
+        FirebaseSyncManager.stopAllRealtimeListeners()
     }
 }
