@@ -107,6 +107,7 @@ fun DentalClinicApp(
     val procedureColorsMap by viewModel.procedureColorsMap.collectAsStateWithLifecycle()
 
     val allUsers by viewModel.allUsers.collectAsStateWithLifecycle()
+    val allActionLogs by viewModel.allActionLogs.collectAsStateWithLifecycle()
 
     val workStartHour by viewModel.workStartHour.collectAsStateWithLifecycle()
     val workEndHour by viewModel.workEndHour.collectAsStateWithLifecycle()
@@ -334,6 +335,7 @@ fun DentalClinicApp(
                             onOpenFirebaseSync = { viewModel.navigateTo(ClinicScreen.FirebaseSync) },
                             onOpenUsersManagement = { viewModel.navigateTo(ClinicScreen.UserManagement) },
                             onOpenWhatsAppReminders = { viewModel.navigateTo(ClinicScreen.WhatsAppReminderSettings) },
+                            onOpenActionLogs = { viewModel.navigateTo(ClinicScreen.ActionLogs) },
                             onClearAllAppointments = { viewModel.clearAllAppointments() },
                             onClearAllPatients = { viewModel.clearAllPatients() },
                             onBack = { viewModel.navigateTo(ClinicScreen.MainCalendar) }
@@ -472,6 +474,16 @@ fun DentalClinicApp(
                     WhatsAppReminderSettingsScreen(
                         currentTemplate = template,
                         onSaveTemplate = { viewModel.saveWhatsAppTemplate(it) },
+                        onBack = { viewModel.navigateTo(ClinicScreen.Settings) }
+                    )
+                }
+
+                is ClinicScreen.ActionLogs -> {
+                    ActionLogScreen(
+                        logs = allActionLogs,
+                        currentUserRole = currentUser.role,
+                        onClearLogs = { viewModel.clearActionLogs() },
+                        onDeleteLog = { viewModel.deleteActionLog(it) },
                         onBack = { viewModel.navigateTo(ClinicScreen.Settings) }
                     )
                 }

@@ -45,6 +45,7 @@ fun ClinicSettingsScreen(
     onOpenFirebaseSync: () -> Unit,
     onOpenUsersManagement: () -> Unit,
     onOpenWhatsAppReminders: () -> Unit,
+    onOpenActionLogs: () -> Unit,
     onClearAllAppointments: () -> Unit,
     onClearAllPatients: () -> Unit,
     onBack: (() -> Unit)? = null,
@@ -133,6 +134,16 @@ fun ClinicSettingsScreen(
                 iconTint = Color(0xFF1E88E5),
                 onClick = onOpenUsersManagement,
                 testTag = "settings_user_management"
+            )
+
+            // Audit Action Logs Card
+            SettingsMenuCard(
+                title = "سجل حركات الموظفين والمواعيد (Audit Log)",
+                subtitle = "متابعة من حجز ومن نقل ومن عدل أو ألغى المواعيد بالتفصيل",
+                icon = Icons.Default.History,
+                iconTint = Color(0xFF00897B),
+                onClick = onOpenActionLogs,
+                testTag = "settings_action_logs"
             )
 
             // WhatsApp 1-Hour Reminder & API Card

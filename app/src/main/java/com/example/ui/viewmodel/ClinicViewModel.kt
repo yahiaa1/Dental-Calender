@@ -45,6 +45,7 @@ sealed class ClinicScreen {
     object FirebaseSync : ClinicScreen()
     object UserManagement : ClinicScreen()
     object WhatsAppReminderSettings : ClinicScreen()
+    object ActionLogs : ClinicScreen()
 }
 
 data class FilterState(
@@ -70,7 +71,8 @@ class ClinicViewModel(application: Application) : AndroidViewModel(application) 
             database.appointmentDao(),
             database.procedureConfigDao(),
             database.whatsappTemplateDao(),
-            database.userDao()
+            database.userDao(),
+            database.actionLogDao()
         )
 
         // Ensure fixed admin user exists in DB:
@@ -219,6 +221,10 @@ class ClinicViewModel(application: Application) : AndroidViewModel(application) 
         .stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
 
     val allTemplates: StateFlow<List<WhatsAppTemplateEntity>> = repository.allTemplates
+        .flowOn(Dispatchers.IO)
+        .stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
+
+    val allActionLogs: StateFlow<List<ActionLogEntity>> = repository.allActionLogs
         .flowOn(Dispatchers.IO)
         .stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
 
@@ -455,7 +461,8 @@ class ClinicViewModel(application: Application) : AndroidViewModel(application) 
             }
 
             val updatedApp = appointment.copy(patientId = finalPatientId)
-            val generatedId = if (updatedApp.id == 0L) {
+            val isNew = updatedApp.id == 0L
+            val generatedId = if (isNew) {
                 repository.insertAppointment(updatedApp)
             } else {
                 repository.updateAppointment(updatedApp)
@@ -463,6 +470,22 @@ class ClinicViewModel(application: Application) : AndroidViewModel(application) 
             }
             val finalSavedApp = updatedApp.copy(id = generatedId)
             activeAppointment.value = finalSavedApp
+
+            if (isNew) {
+                logAction(
+                    actionType = ActionLogType.BOOKING,
+                    appointment = finalSavedApp,
+                    details = "قام ${currentUser.value.name} بحجز موعد جديد للمريض ${finalSavedApp.patientName} (${finalSavedApp.procedureName}) يوم ${finalSavedApp.dateStr} الساعة ${TimeFormatter.format12Hour(finalSavedApp.startTime)}",
+                    extraInfo = "حجز جديد"
+                )
+            } else {
+                logAction(
+                    actionType = ActionLogType.EDIT,
+                    appointment = finalSavedApp,
+                    details = "قام ${currentUser.value.name} بتعديل بيانات موعد المريض ${finalSavedApp.patientName} (${finalSavedApp.procedureName}) ليوم ${finalSavedApp.dateStr} الساعة ${TimeFormatter.format12Hour(finalSavedApp.startTime)}",
+                    extraInfo = "تعديل موعد"
+                )
+            }
 
             FirebaseSyncManager.autoSyncAppointment(finalSavedApp)
 
@@ -499,6 +522,14 @@ class ClinicViewModel(application: Application) : AndroidViewModel(application) 
             )
             repository.updateAppointment(updated)
             activeAppointment.value = updated
+
+            logAction(
+                actionType = ActionLogType.MOVE,
+                appointment = updated,
+                details = "قام ${currentUser.value.name} بنقل موعد المريض ${appointment.patientName} من تاريخ ${appointment.dateStr} (${TimeFormatter.format12Hour(appointment.startTime)}) إلى تاريخ $newDate (${TimeFormatter.format12Hour(newStartTime)})",
+                extraInfo = "من ${appointment.dateStr} إلى $newDate"
+            )
+
             FirebaseSyncManager.autoSyncAppointment(updated)
 
             AppointmentAlarmScheduler.cancelReminder(getApplication(), updated.id)
@@ -523,6 +554,7 @@ class ClinicViewModel(application: Application) : AndroidViewModel(application) 
 
     fun updateAppointmentStatus(appointmentId: Long, newStatus: AppointmentStatus) {
         viewModelScope.launch(Dispatchers.IO) {
+            val oldApp = repository.getAppointmentById(appointmentId)
             repository.updateAppointmentStatus(appointmentId, newStatus)
             val updated = repository.getAppointmentById(appointmentId)
             if (updated != null) {
@@ -530,6 +562,14 @@ class ClinicViewModel(application: Application) : AndroidViewModel(application) 
                     activeAppointment.value = updated
                 }
                 FirebaseSyncManager.autoSyncAppointment(updated)
+
+                val oldStatusName = oldApp?.status?.label ?: ""
+                logAction(
+                    actionType = ActionLogType.STATUS_CHANGE,
+                    appointment = updated,
+                    details = "قام ${currentUser.value.name} بتغيير حالة موعد المريض ${updated.patientName} من '$oldStatusName' إلى '${newStatus.label}'",
+                    extraInfo = "الحالة: ${newStatus.label}"
+                )
             }
             TodayAppointmentsWidgetProvider.notifyDataChanged(getApplication())
         }
@@ -537,6 +577,12 @@ class ClinicViewModel(application: Application) : AndroidViewModel(application) 
 
     fun deleteAppointment(appointment: AppointmentEntity) {
         viewModelScope.launch(Dispatchers.IO) {
+            logAction(
+                actionType = ActionLogType.DELETE,
+                appointment = appointment,
+                details = "قام ${currentUser.value.name} بحذف/إلغاء موعد المريض ${appointment.patientName} المحدد في تاريخ ${appointment.dateStr} (${TimeFormatter.format12Hour(appointment.startTime)})",
+                extraInfo = "إلغاء الموعد"
+            )
             AppointmentAlarmScheduler.cancelReminder(getApplication(), appointment.id)
             repository.deleteAppointment(appointment)
             FirebaseSyncManager.autoDeleteAppointment(appointment.id)
@@ -544,6 +590,54 @@ class ClinicViewModel(application: Application) : AndroidViewModel(application) 
                 activeAppointment.value = null
             }
             TodayAppointmentsWidgetProvider.notifyDataChanged(getApplication())
+        }
+    }
+
+    private suspend fun logAction(
+        actionType: ActionLogType,
+        appointment: AppointmentEntity,
+        details: String,
+        extraInfo: String = ""
+    ) {
+        try {
+            val user = currentUser.value
+            val now = java.time.LocalDateTime.now()
+            val timeFormatter = java.time.format.DateTimeFormatter.ofPattern("hh:mm a", java.util.Locale("ar"))
+            val dateFormatter = java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd")
+            val timeStr = now.format(timeFormatter)
+            val dateStr = now.format(dateFormatter)
+
+            val log = ActionLogEntity(
+                dateStr = dateStr,
+                timeStr = timeStr,
+                actionType = actionType,
+                employeeId = user.id,
+                employeeName = user.name,
+                employeeRole = user.role.title,
+                patientName = appointment.patientName,
+                patientPhone = appointment.patientPhone,
+                appointmentId = appointment.id,
+                appointmentDate = appointment.dateStr,
+                appointmentTime = appointment.startTime,
+                procedureName = appointment.procedureName,
+                details = details,
+                extraInfo = extraInfo
+            )
+            repository.insertActionLog(log)
+        } catch (e: Exception) {
+            // Guard safely
+        }
+    }
+
+    fun clearActionLogs() {
+        viewModelScope.launch(Dispatchers.IO) {
+            repository.clearAllActionLogs()
+        }
+    }
+
+    fun deleteActionLog(id: Long) {
+        viewModelScope.launch(Dispatchers.IO) {
+            repository.deleteActionLogById(id)
         }
     }
 

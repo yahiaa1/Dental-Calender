@@ -9,7 +9,8 @@ class ClinicRepository(
     private val appointmentDao: AppointmentDao,
     private val procedureConfigDao: ProcedureConfigDao,
     private val whatsappTemplateDao: WhatsAppTemplateDao,
-    private val userDao: UserDao
+    private val userDao: UserDao,
+    private val actionLogDao: ActionLogDao
 ) {
     // Users & Staff
     val allUsers: Flow<List<UserEntity>> = userDao.getAllUsers()
@@ -60,4 +61,10 @@ class ClinicRepository(
         whatsappTemplateDao.getTemplateByCategory(category)
     suspend fun updateTemplate(template: WhatsAppTemplateEntity) =
         whatsappTemplateDao.updateTemplate(template)
+
+    // Action Logs (Audit Trail)
+    val allActionLogs: Flow<List<ActionLogEntity>> = actionLogDao.getAllLogs()
+    suspend fun insertActionLog(log: ActionLogEntity): Long = actionLogDao.insertLog(log)
+    suspend fun clearAllActionLogs() = actionLogDao.clearAllLogs()
+    suspend fun deleteActionLogById(id: Long) = actionLogDao.deleteLogById(id)
 }

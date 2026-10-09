@@ -57,3 +57,19 @@ enum class UserRole(val title: String) {
     ADMIN("طبيب / أدمن"),
     STAFF("موظف استقبال / مساعد")
 }
+
+enum class ActionLogType(val label: String, val colorHex: String) {
+    BOOKING("حجز جديد", "#2E7D32"),
+    MOVE("نقل موعد", "#1E88E5"),
+    STATUS_CHANGE("تغيير حالة", "#E65100"),
+    EDIT("تعديل تفاصيل", "#6A1B9A"),
+    DELETE("إلغاء / حذف", "#C62828");
+
+    fun toComposeColor(): Color {
+        return try {
+            Color(android.graphics.Color.parseColor(colorHex))
+        } catch (e: Exception) {
+            Color(0xFF1E88E5)
+        }
+    }
+}

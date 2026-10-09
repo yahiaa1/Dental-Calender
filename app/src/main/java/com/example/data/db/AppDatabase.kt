@@ -47,6 +47,21 @@ class AppConverters {
             PatientClassification.DISCIPLINED
         }
     }
+
+    @TypeConverter
+    fun fromActionLogType(type: ActionLogType?): String {
+        return type?.name ?: ActionLogType.BOOKING.name
+    }
+
+    @TypeConverter
+    fun toActionLogType(value: String?): ActionLogType {
+        if (value == null) return ActionLogType.BOOKING
+        return try {
+            ActionLogType.valueOf(value)
+        } catch (e: Exception) {
+            ActionLogType.BOOKING
+        }
+    }
 }
 
 @Database(
@@ -55,9 +70,10 @@ class AppConverters {
         AppointmentEntity::class,
         ProcedureConfigEntity::class,
         WhatsAppTemplateEntity::class,
-        UserEntity::class
+        UserEntity::class,
+        ActionLogEntity::class
     ],
-    version = 5,
+    version = 6,
     exportSchema = false
 )
 @TypeConverters(AppConverters::class)
@@ -68,6 +84,7 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun procedureConfigDao(): ProcedureConfigDao
     abstract fun whatsappTemplateDao(): WhatsAppTemplateDao
     abstract fun userDao(): UserDao
+    abstract fun actionLogDao(): ActionLogDao
 
     companion object {
         @Volatile
