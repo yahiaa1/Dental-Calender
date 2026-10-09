@@ -19,8 +19,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.data.model.AppointmentEntity
@@ -59,18 +61,20 @@ fun ReportsScreen(
         ReportScope.ALL -> appointments
     }
 
+    // Active/valid appointments contributing to plan and expected revenue (strictly excluding cancelled & no-show)
+    val validActiveAppointments = filteredAppointments
+        .filter { it.status != AppointmentStatus.CANCELLED && it.status != AppointmentStatus.NO_SHOW }
+
     // Expected target: Sum of prices of all non-cancelled & non-no-show appointments
-    val expectedTarget = filteredAppointments
-        .filter { it.status != AppointmentStatus.NO_SHOW && it.status != AppointmentStatus.CANCELLED }
-        .sumOf { it.price }
+    val expectedTarget = validActiveAppointments.sumOf { it.price }
 
     // Actual collected revenue for completed appointments
     val actualCollectedRevenue = filteredAppointments
         .filter { it.status == AppointmentStatus.COMPLETED }
         .sumOf { it.price }
 
-    // Total value of all bookings in this scope
-    val totalBookingsValue = filteredAppointments.sumOf { it.price }
+    // Total value of all active bookings in this scope (خطة الإجمالي) - Cancelled appointments NOT included
+    val totalBookingsValue = validActiveAppointments.sumOf { it.price }
 
     // Remaining / pending uncollected balance
     val remainingBalance = (expectedTarget - actualCollectedRevenue).coerceAtLeast(0.0)
@@ -155,15 +159,16 @@ fun ReportsScreen(
                             appendLine("• المحصل الفعلي: ${actualCollectedRevenue.toInt()} ج.م")
                             appendLine("• التارجت المتوقع: ${expectedTarget.toInt()} ج.م")
                             appendLine("• نسبة الإنجاز: $targetAchievedPercentage%")
-                            appendLine("• إجمالي قيمة الحجوزات: ${totalBookingsValue.toInt()} ج.م")
+                            appendLine("• خطة إجمالي الحجوزات السارية: ${totalBookingsValue.toInt()} ج.م")
                             appendLine("• المتبقي المعلق: ${remainingBalance.toInt()} ج.م")
-                            appendLine("• إجمالي عدد المواعيد: ${filteredAppointments.size}")
+                            appendLine("• إجمالي عدد المواعيد: ${filteredAppointments.size} (السارية: ${validActiveAppointments.size} | الملغية: $countCancelled)")
                             appendLine("• مؤكد: $countConfirmed | جار العلاج: $countInTreatment | مكتمل: $countCompleted")
                             appendLine("• لم يتم التاكيد: $countUnconfirmed | ملغي: $countCancelled | لم يحضر: $countNoShow")
                             appendLine("-----------------------------")
                             appendLine("تفاصيل المواعيد:")
                             filteredAppointments.forEach {
-                                appendLine("- ${it.dateStr} [${it.startTime}]: ${it.patientName} (${it.procedureName}) - ${it.price.toInt()} ج.م [${it.status.label}]")
+                                val statusNotice = if (it.status == AppointmentStatus.CANCELLED || it.status == AppointmentStatus.NO_SHOW) " [غير محسوب بالخطة]" else ""
+                                appendLine("- ${it.dateStr} [${it.startTime}]: ${it.patientName} (${it.procedureName}) - ${it.price.toInt()} ج.م [${it.status.label}]$statusNotice")
                             }
                         }
                         val sendIntent = Intent(Intent.ACTION_SEND).apply {
@@ -509,7 +514,7 @@ fun ReportsScreen(
                                 modifier = Modifier.size(16.dp)
                             )
                             Spacer(modifier = Modifier.width(6.dp))
-                            Text(text = "إجمالي الحجوزات", fontSize = 11.sp, color = Color(0xFF546E7A))
+                            Text(text = "خطة إجمالي الحجوزات", fontSize = 11.sp, color = Color(0xFF546E7A))
                         }
                         Text(
                             text = "${totalBookingsValue.toInt()} ج.م",
@@ -518,7 +523,7 @@ fun ReportsScreen(
                             color = Color(0xFF263238)
                         )
                         Text(
-                            text = "قيمة كل المواعيد بالفترة",
+                            text = "المواعيد السارية (الملغي مستبعد)",
                             fontSize = 10.sp,
                             color = Color(0xFF90A4AE)
                         )
@@ -608,14 +613,14 @@ fun ReportsScreen(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Text(
-                            text = "تفاصيل المواعيد (${filteredAppointments.size})",
+                            text = "تفاصيل المواعيد (${validActiveAppointments.size} سارية / ${filteredAppointments.size})",
                             fontSize = 14.sp,
                             fontWeight = FontWeight.Bold,
                             color = Color(0xFF263238)
                         )
 
                         Text(
-                            text = "إجمالي: ${filteredAppointments.sumOf { it.price }.toInt()} ج.م",
+                            text = "خطة الإجمالي: ${totalBookingsValue.toInt()} ج.م",
                             fontSize = 12.sp,
                             fontWeight = FontWeight.Bold,
                             color = ClinicPrimary
@@ -677,12 +682,26 @@ fun ReportsScreen(
                                     }
                                 }
                                 Column(horizontalAlignment = Alignment.End) {
+                                    val isCancelledOrNoShow = app.status == AppointmentStatus.CANCELLED || app.status == AppointmentStatus.NO_SHOW
                                     Text(
                                         text = "${app.price.toInt()} ج.م",
                                         fontSize = 14.sp,
                                         fontWeight = FontWeight.Bold,
-                                        color = if (app.status == AppointmentStatus.COMPLETED) Color(0xFF2E7D32) else ClinicPrimary
+                                        color = when {
+                                            isCancelledOrNoShow -> Color(0xFFB0BEC5)
+                                            app.status == AppointmentStatus.COMPLETED -> Color(0xFF2E7D32)
+                                            else -> ClinicPrimary
+                                        },
+                                        style = if (isCancelledOrNoShow) TextStyle(textDecoration = TextDecoration.LineThrough) else TextStyle.Default
                                     )
+                                    if (isCancelledOrNoShow) {
+                                        Text(
+                                            text = "(غير محسوب)",
+                                            fontSize = 9.sp,
+                                            color = Color(0xFFE53935),
+                                            fontWeight = FontWeight.Medium
+                                        )
+                                    }
                                     Spacer(modifier = Modifier.height(2.dp))
                                     StatusBadge(status = app.status)
                                 }

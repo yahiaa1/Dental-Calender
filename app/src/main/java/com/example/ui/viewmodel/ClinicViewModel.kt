@@ -635,6 +635,7 @@ class ClinicViewModel(application: Application) : AndroidViewModel(application) 
             )
             AppointmentAlarmScheduler.cancelReminder(getApplication(), appointment.id)
             repository.deleteAppointment(appointment)
+            repository.deleteAppointmentById(appointment.id)
             FirebaseSyncManager.autoDeleteAppointment(appointment.id)
             if (activeAppointment.value?.id == appointment.id) {
                 activeAppointment.value = null

@@ -106,6 +106,8 @@ fun AppointmentDetailsScreen(
                     onClick = {
                         showCancelOrDeleteDialog = false
                         onStatusChange(AppointmentStatus.CANCELLED)
+                        Toast.makeText(context, "تم إلغاء الموعد واستبعاده من التقويم وخطة الإيرادات", Toast.LENGTH_SHORT).show()
+                        onBack()
                     },
                     colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFE53935))
                 ) {
@@ -117,6 +119,7 @@ fun AppointmentDetailsScreen(
                     onClick = {
                         showCancelOrDeleteDialog = false
                         onDelete()
+                        Toast.makeText(context, "تم حذف الموعد نهائياً وخصم إيراده من التقارير", Toast.LENGTH_SHORT).show()
                     }
                 ) {
                     Text("حذف نهائي", color = Color(0xFFD32F2F))

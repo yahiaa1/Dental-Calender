@@ -38,7 +38,7 @@ class TodayAppointmentsRemoteViewsFactory(
             val db = AppDatabase.getDatabase(context)
             val today = LocalDate.now()
             appointments = db.appointmentDao().getAllAppointmentsSync()
-                .filter { DateUtils.isSameDay(it.dateStr, today) }
+                .filter { DateUtils.isSameDay(it.dateStr, today) && it.status != AppointmentStatus.CANCELLED }
         } catch (e: Exception) {
             e.printStackTrace()
             appointments = emptyList()

@@ -65,8 +65,9 @@ class TodayAppointmentsWidgetProvider : AppWidgetProvider() {
                 val db = AppDatabase.getDatabase(context)
                 val allApps = db.appointmentDao().getAllAppointmentsSync()
                 val todayApps = allApps.filter { DateUtils.isSameDay(it.dateStr, today) }
-                count = todayApps.size
-                totalPrice = todayApps.sumOf { it.price }
+                val validTodayApps = todayApps.filter { it.status != com.example.data.model.AppointmentStatus.CANCELLED && it.status != com.example.data.model.AppointmentStatus.NO_SHOW }
+                count = validTodayApps.size
+                totalPrice = validTodayApps.sumOf { it.price }
             } catch (e: Exception) {
                 e.printStackTrace()
             }
