@@ -372,7 +372,9 @@ fun UserManagementScreen(
                 val isAdmin = user.role == UserRole.ADMIN
 
                 Card(
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { onSelectCurrentUser(user) },
                     shape = RoundedCornerShape(10.dp),
                     colors = CardDefaults.cardColors(
                         containerColor = if (isSelected) Color(0xFFF1F8E9) else Color.White

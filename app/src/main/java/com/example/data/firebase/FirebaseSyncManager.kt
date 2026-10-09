@@ -555,9 +555,7 @@ object FirebaseSyncManager {
     fun autoSyncSettings(
         workStartHour: Int,
         workEndHour: Int,
-        dayOff: DayOfWeek?,
-        hideDayOff: Boolean,
-        hideCancelled: Boolean
+        dayOff: DayOfWeek?
     ) {
         val now = System.currentTimeMillis()
         markLocalUpdate("settings", 1L, now)
@@ -569,8 +567,6 @@ object FirebaseSyncManager {
                     "workStartHour" to workStartHour,
                     "workEndHour" to workEndHour,
                     "dayOff" to (dayOff?.name ?: "NONE"),
-                    "hideDayOff" to hideDayOff,
-                    "hideCancelled" to hideCancelled,
                     "updatedAt" to now
                 )
                 docRef.set(data, SetOptions.merge()).await()
@@ -589,7 +585,7 @@ object FirebaseSyncManager {
     fun startAllRealtimeListeners(
         context: Context,
         repository: ClinicRepository,
-        onSettingsChanged: ((workStart: Int, workEnd: Int, dayOff: DayOfWeek?, hideDayOff: Boolean, hideCancelled: Boolean) -> Unit)? = null
+        onSettingsChanged: ((workStart: Int, workEnd: Int, dayOff: DayOfWeek?) -> Unit)? = null
     ) {
         init(context)
         stopAllRealtimeListeners()
@@ -955,10 +951,8 @@ object FirebaseSyncManager {
                     val end = snapshot.safeInt("workEndHour") ?: 21
                     val dayOffStr = snapshot.safeString("dayOff", "FRIDAY")
                     val dayOff = if (dayOffStr == "NONE") null else try { DayOfWeek.valueOf(dayOffStr) } catch (e: Exception) { DayOfWeek.FRIDAY }
-                    val hideDayOff = snapshot.getBoolean("hideDayOff") ?: false
-                    val hideCancelled = snapshot.getBoolean("hideCancelled") ?: true
 
-                    onSettingsChanged?.invoke(start, end, dayOff, hideDayOff, hideCancelled)
+                    onSettingsChanged?.invoke(start, end, dayOff)
                 }
         } catch (e: Exception) {
             Log.w(TAG, "Settings listener error: ${e.message}")

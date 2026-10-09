@@ -65,8 +65,33 @@ class ClinicViewModel(application: Application) : AndroidViewModel(application) 
     private val repository: ClinicRepository
     private val authPrefs = application.getSharedPreferences("clinic_auth_prefs", Context.MODE_PRIVATE)
 
-    // User Authentication State: Persisted session so app remains open until explicit logout
-    val isAuthenticated = MutableStateFlow(authPrefs.getBoolean("is_logged_in", true))
+    // Check whether the app currently has a genuinely authenticated user session
+    private fun checkIsAuthenticated(): Boolean {
+        // Enforce session versioning: if auth_version < 2, purge any legacy/stale default admin session from older APKs
+        val authVersion = authPrefs.getInt("auth_version", 0)
+        if (authVersion < 2) {
+            authPrefs.edit()
+                .putInt("auth_version", 2)
+                .putBoolean("is_logged_in", false)
+                .remove("logged_in_username")
+                .remove("logged_in_user_id")
+                .remove("logged_in_user_name")
+                .remove("logged_in_user_phone")
+                .remove("logged_in_user_role")
+                .apply()
+            return false
+        }
+
+        val isLoggedIn = authPrefs.getBoolean("is_logged_in", false)
+        val savedUsername = authPrefs.getString("logged_in_username", null)
+        if (!isLoggedIn || savedUsername.isNullOrBlank()) {
+            return false
+        }
+        return true
+    }
+
+    // User Authentication State: Strict check ensuring app always opens on LoginScreen on fresh install or update
+    val isAuthenticated = MutableStateFlow(checkIsAuthenticated())
 
     init {
         val database = AppDatabase.getDatabase(application, viewModelScope)
@@ -99,9 +124,10 @@ class ClinicViewModel(application: Application) : AndroidViewModel(application) 
             // Restore all users from Cloud Firestore to local DB immediately on app launch
             FirebaseSyncManager.syncUsersFromFirebase(repository)
 
-            // Restore saved logged-in user if available
+            // Restore saved logged-in user if available and authenticated
+            val isLoggedIn = checkIsAuthenticated()
             val savedUsername = authPrefs.getString("logged_in_username", null)
-            if (!savedUsername.isNullOrBlank()) {
+            if (isLoggedIn && !savedUsername.isNullOrBlank()) {
                 val user = repository.getUserByUsername(savedUsername)
                 if (user != null) {
                     currentUser.value = user
@@ -109,22 +135,19 @@ class ClinicViewModel(application: Application) : AndroidViewModel(application) 
             }
         }
 
-        // Realtime automatic sync across all clinic devices for ALL entities (Appointments, Patients, Staff, Procedures, Action Logs, Settings, Templates) via Firebase Firestore:
+        // Realtime automatic sync across all clinic devices for entities via Firebase Firestore:
+        // Display toggles (hideDayOff / hideCancelled) are NOT synced remotely so each user/device is independent
         FirebaseSyncManager.startAllRealtimeListeners(
             application,
             repository,
-            onSettingsChanged = { remoteStart, remoteEnd, remoteDayOff, remoteHideDayOff, remoteHideCancelled ->
+            onSettingsChanged = { remoteStart, remoteEnd, remoteDayOff ->
                 workStartHour.value = remoteStart
                 workEndHour.value = remoteEnd
                 dayOff.value = remoteDayOff
-                hideDayOff.value = remoteHideDayOff
-                hideCancelledFromCalendar.value = remoteHideCancelled
                 settingsPrefs.edit()
                     .putInt("work_start_hour", remoteStart)
                     .putInt("work_end_hour", remoteEnd)
                     .putString("day_off", remoteDayOff?.name ?: "NONE")
-                    .putBoolean("hide_day_off", remoteHideDayOff)
-                    .putBoolean("hide_cancelled", remoteHideCancelled)
                     .apply()
             }
         )
@@ -156,17 +179,17 @@ class ClinicViewModel(application: Application) : AndroidViewModel(application) 
     // Zoom level: minimum boundary is 80f, max 160f
     val hourHeightDp = MutableStateFlow(85f)
 
-    // Option to hide cancelled appointments from calendar view
-    val hideCancelledFromCalendar = MutableStateFlow(true)
+    // Option to hide cancelled appointments from calendar view - Individual per device preference
+    val hideCancelledFromCalendar = MutableStateFlow(settingsPrefs.getBoolean("hide_cancelled", true))
 
-    // Day Off configuration: Default is FRIDAY
+    // Day Off configuration: Default is FRIDAY (Shared clinic schedule)
     val dayOff = MutableStateFlow<DayOfWeek?>(
         settingsPrefs.getString("day_off", "FRIDAY")?.let {
             if (it == "NONE") null else try { DayOfWeek.valueOf(it) } catch (e: Exception) { DayOfWeek.FRIDAY }
         } ?: DayOfWeek.FRIDAY
     )
 
-    // Option to hide/show the day off from calendar view
+    // Option to hide/show the day off from calendar view - Individual per device preference
     val hideDayOff = MutableStateFlow(settingsPrefs.getBoolean("hide_day_off", false))
 
     fun setDayOff(day: DayOfWeek?) {
@@ -182,7 +205,7 @@ class ClinicViewModel(application: Application) : AndroidViewModel(application) 
         if (next && dayOff.value != null && selectedDate.value.dayOfWeek == dayOff.value) {
             selectedDate.value = selectedDate.value.plusDays(1)
         }
-        syncClinicSettings()
+        // Independent local device preference - Do not sync to Firestore
     }
 
     fun setHideDayOff(hide: Boolean) {
@@ -191,16 +214,14 @@ class ClinicViewModel(application: Application) : AndroidViewModel(application) 
         if (hide && dayOff.value != null && selectedDate.value.dayOfWeek == dayOff.value) {
             selectedDate.value = selectedDate.value.plusDays(1)
         }
-        syncClinicSettings()
+        // Independent local device preference - Do not sync to Firestore
     }
 
     private fun syncClinicSettings() {
         FirebaseSyncManager.autoSyncSettings(
             workStartHour = workStartHour.value,
             workEndHour = workEndHour.value,
-            dayOff = dayOff.value,
-            hideDayOff = hideDayOff.value,
-            hideCancelled = hideCancelledFromCalendar.value
+            dayOff = dayOff.value
         )
     }
 
@@ -224,9 +245,35 @@ class ClinicViewModel(application: Application) : AndroidViewModel(application) 
         .flowOn(Dispatchers.IO)
         .stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
 
-    val currentUser = MutableStateFlow(
-        UserEntity(1, "د. محمد (أدمن)", "01000000001", UserRole.ADMIN, username = "admin", password = "1234655")
-    )
+    private fun getInitialUser(): UserEntity {
+        val isLoggedIn = checkIsAuthenticated()
+        if (isLoggedIn) {
+            val savedUsername = authPrefs.getString("logged_in_username", null)
+            if (!savedUsername.isNullOrBlank()) {
+                val savedId = authPrefs.getLong("logged_in_user_id", 0L)
+                val savedName = authPrefs.getString("logged_in_user_name", savedUsername) ?: savedUsername
+                val savedPhone = authPrefs.getString("logged_in_user_phone", "") ?: ""
+                val savedRoleStr = authPrefs.getString("logged_in_user_role", UserRole.STAFF.name)
+                val role = try {
+                    UserRole.valueOf(savedRoleStr ?: UserRole.STAFF.name)
+                } catch (e: Exception) {
+                    UserRole.STAFF
+                }
+                return UserEntity(
+                    id = savedId,
+                    name = savedName,
+                    phone = savedPhone,
+                    role = role,
+                    username = savedUsername,
+                    password = ""
+                )
+            }
+        }
+        // Guest placeholder when unauthenticated - Never default to Admin without explicit login!
+        return UserEntity(0, "حساب زائر", "", UserRole.STAFF, username = "", password = "")
+    }
+
+    val currentUser = MutableStateFlow(getInitialUser())
 
     // Data streams from Room (Kept hot in memory for instantaneous rendering)
     val allAppointments: StateFlow<List<AppointmentEntity>> = repository.allAppointments
@@ -304,24 +351,25 @@ class ClinicViewModel(application: Application) : AndroidViewModel(application) 
                 FirebaseSyncManager.autoSyncUser(newAdmin)
                 admin = newAdmin
             }
-            currentUser.value = admin
+            selectCurrentUser(admin)
             isAuthenticated.value = true
-            authPrefs.edit()
-                .putBoolean("is_logged_in", true)
-                .putString("logged_in_username", admin.username)
-                .apply()
             return admin
         }
 
         // 2. Custom staff accounts verification
-        val user = repository.getUserByUsername(cleanUsername)
+        var user = repository.getUserByUsername(cleanUsername)
+        if (user == null) {
+            // If user is not yet loaded into local Room (e.g. freshly installed app), sync from Firebase first
+            try {
+                FirebaseSyncManager.syncUsersFromFirebase(repository)
+                user = repository.getUserByUsername(cleanUsername)
+            } catch (e: Exception) {
+                // Ignore safely
+            }
+        }
         if (user != null && user.password == cleanPass) {
-            currentUser.value = user
+            selectCurrentUser(user)
             isAuthenticated.value = true
-            authPrefs.edit()
-                .putBoolean("is_logged_in", true)
-                .putString("logged_in_username", user.username)
-                .apply()
             return user
         }
         return null
@@ -330,9 +378,15 @@ class ClinicViewModel(application: Application) : AndroidViewModel(application) 
     fun logout() {
         isAuthenticated.value = false
         authPrefs.edit()
+            .putInt("auth_version", 2)
             .putBoolean("is_logged_in", false)
             .remove("logged_in_username")
+            .remove("logged_in_user_id")
+            .remove("logged_in_user_name")
+            .remove("logged_in_user_phone")
+            .remove("logged_in_user_role")
             .apply()
+        currentUser.value = UserEntity(0, "حساب زائر", "", UserRole.STAFF, username = "", password = "")
         currentScreen.value = ClinicScreen.MainCalendar
         bottomNavIndex.value = 0
     }
@@ -367,13 +421,20 @@ class ClinicViewModel(application: Application) : AndroidViewModel(application) 
     fun selectCurrentUser(user: UserEntity) {
         currentUser.value = user
         authPrefs.edit()
+            .putInt("auth_version", 2)
+            .putBoolean("is_logged_in", true)
             .putString("logged_in_username", user.username)
+            .putLong("logged_in_user_id", user.id)
+            .putString("logged_in_user_name", user.name)
+            .putString("logged_in_user_phone", user.phone)
+            .putString("logged_in_user_role", user.role.name)
             .apply()
     }
 
     fun setAuthenticated(authenticated: Boolean) {
         isAuthenticated.value = authenticated
         authPrefs.edit()
+            .putInt("auth_version", 2)
             .putBoolean("is_logged_in", authenticated)
             .apply()
     }
@@ -431,7 +492,7 @@ class ClinicViewModel(application: Application) : AndroidViewModel(application) 
         val next = !hideCancelledFromCalendar.value
         hideCancelledFromCalendar.value = next
         settingsPrefs.edit().putBoolean("hide_cancelled", next).apply()
-        syncClinicSettings()
+        // Independent local device preference - Do not sync to Firestore
     }
 
     fun setReportsSelectedDate(date: LocalDate) {
