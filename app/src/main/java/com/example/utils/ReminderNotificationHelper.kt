@@ -171,4 +171,12 @@ object ReminderNotificationHelper {
             // Notification permission might not be granted yet
         }
     }
+
+    fun dismissNotification(context: Context, appointmentId: Long) {
+        try {
+            NotificationManagerCompat.from(context).cancel(appointmentId.toInt())
+        } catch (e: Exception) {
+            // Ignore safely
+        }
+    }
 }

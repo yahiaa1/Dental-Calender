@@ -123,6 +123,8 @@ class ClinicViewModel(application: Application) : AndroidViewModel(application) 
 
             // Restore all users from Cloud Firestore to local DB immediately on app launch
             FirebaseSyncManager.syncUsersFromFirebase(repository)
+            // Restore all WhatsApp templates from Cloud Firestore to local DB immediately on app launch
+            FirebaseSyncManager.syncTemplatesFromFirebase(repository)
 
             // Restore saved logged-in user if available and authenticated
             val isLoggedIn = checkIsAuthenticated()
@@ -598,21 +600,25 @@ class ClinicViewModel(application: Application) : AndroidViewModel(application) 
 
             FirebaseSyncManager.autoSyncAppointment(finalSavedApp)
 
-            val reminderTemplate = repository.getTemplateByCategory(WhatsAppTemplateCategory.ONE_HOUR_BEFORE)
-            val templateText = reminderTemplate?.messageText
-                ?: "مرحباً {اسم المريض} ⏰ نذكرك بموعدك في عيادة الأسنان بعد ساعة في تمام {وقت الموعد}."
-            val time12 = TimeFormatter.format12Hour(finalSavedApp.startTime)
-            val reminderMessage = templateText
-                .replace("{اسم المريض}", finalSavedApp.patientName)
-                .replace("{وقت الموعد}", time12)
-                .replace("{تاريخ الموعد}", finalSavedApp.dateStr)
-                .replace("{اسم العيادة}", "عيادة الأسنان")
+            if (finalSavedApp.status == AppointmentStatus.CANCELLED || finalSavedApp.status == AppointmentStatus.NO_SHOW) {
+                AppointmentAlarmScheduler.cancelReminder(getApplication(), finalSavedApp.id)
+            } else {
+                val reminderTemplate = repository.getTemplateByCategory(WhatsAppTemplateCategory.ONE_HOUR_BEFORE)
+                val templateText = reminderTemplate?.messageText
+                    ?: "مرحباً {اسم المريض} ⏰ نذكرك بموعدك في عيادة الأسنان بعد ساعة في تمام {وقت الموعد}."
+                val time12 = TimeFormatter.format12Hour(finalSavedApp.startTime)
+                val reminderMessage = templateText
+                    .replace("{اسم المريض}", finalSavedApp.patientName)
+                    .replace("{وقت الموعد}", time12)
+                    .replace("{تاريخ الموعد}", finalSavedApp.dateStr)
+                    .replace("{اسم العيادة}", "عيادة الأسنان")
 
-            AppointmentAlarmScheduler.scheduleOneHourReminder(
-                context = getApplication(),
-                appointment = finalSavedApp,
-                customMessage = reminderMessage
-            )
+                AppointmentAlarmScheduler.scheduleOneHourReminder(
+                    context = getApplication(),
+                    appointment = finalSavedApp,
+                    customMessage = reminderMessage
+                )
+            }
             TodayAppointmentsWidgetProvider.notifyDataChanged(getApplication())
         }
     }
@@ -669,6 +675,12 @@ class ClinicViewModel(application: Application) : AndroidViewModel(application) 
             repository.updateAppointmentStatus(appointmentId, newStatus)
             val updated = repository.getAppointmentById(appointmentId)
             if (updated != null) {
+                if (newStatus == AppointmentStatus.CANCELLED || newStatus == AppointmentStatus.NO_SHOW) {
+                    AppointmentAlarmScheduler.cancelReminder(getApplication(), updated.id)
+                } else if (newStatus == AppointmentStatus.CONFIRMED || newStatus == AppointmentStatus.UNCONFIRMED) {
+                    AppointmentAlarmScheduler.scheduleOneHourReminder(getApplication(), updated)
+                }
+
                 if (activeAppointment.value?.id == appointmentId) {
                     activeAppointment.value = updated
                 }

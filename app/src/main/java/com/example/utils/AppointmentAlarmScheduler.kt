@@ -21,8 +21,11 @@ object AppointmentAlarmScheduler {
         customMessage: String = "",
         whatsappApiUrl: String = ""
     ) {
-        // Do not schedule for cancelled appointments
-        if (appointment.status == AppointmentStatus.CANCELLED) return
+        // Do not schedule for cancelled or no-show appointments, cancel immediately
+        if (appointment.status == AppointmentStatus.CANCELLED || appointment.status == AppointmentStatus.NO_SHOW) {
+            cancelReminder(context, appointment.id)
+            return
+        }
 
         try {
             val date = LocalDate.parse(appointment.dateStr)
@@ -91,7 +94,9 @@ object AppointmentAlarmScheduler {
 
     fun scheduleAllUpcoming(context: Context, appointments: List<AppointmentEntity>) {
         appointments.forEach { app ->
-            if (app.status != AppointmentStatus.CANCELLED) {
+            if (app.status == AppointmentStatus.CANCELLED || app.status == AppointmentStatus.NO_SHOW) {
+                cancelReminder(context, app.id)
+            } else {
                 scheduleOneHourReminder(
                     context = context,
                     appointment = app,
@@ -112,6 +117,8 @@ object AppointmentAlarmScheduler {
             )
             val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
             alarmManager.cancel(pendingIntent)
+            pendingIntent.cancel()
+            ReminderNotificationHelper.dismissNotification(context, appointmentId)
         } catch (e: Exception) {
             // Ignore
         }

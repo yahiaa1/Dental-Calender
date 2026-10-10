@@ -6,6 +6,7 @@ import android.util.Log
 import com.example.data.model.*
 import com.example.data.repository.ClinicRepository
 import com.example.receiver.TodayAppointmentsWidgetProvider
+import com.example.utils.AppointmentAlarmScheduler
 import com.google.firebase.FirebaseApp
 import com.google.firebase.FirebaseOptions
 import com.google.firebase.firestore.*
@@ -535,7 +536,6 @@ object FirebaseSyncManager {
         CoroutineScope(Dispatchers.IO).launch {
             try {
                 val db = getFirestore() ?: return@launch
-                val docRef = db.collection("clinic_whatsapp_templates").document(template.id.toString())
                 val data = mapOf(
                     "id" to template.id,
                     "category" to template.category.name,
@@ -543,11 +543,48 @@ object FirebaseSyncManager {
                     "messageText" to template.messageText,
                     "updatedAt" to now
                 )
-                docRef.set(data, SetOptions.merge()).await()
-                Log.d(TAG, "Auto-synced WhatsApp template #${template.id} to Firestore")
+                // Save under category document key so all clinic devices sync to the exact same canonical template document
+                db.collection("clinic_whatsapp_templates").document(template.category.name)
+                    .set(data, SetOptions.merge()).await()
+                if (template.id > 0L) {
+                    db.collection("clinic_whatsapp_templates").document(template.id.toString())
+                        .set(data, SetOptions.merge()).await()
+                }
+                Log.d(TAG, "Auto-synced WhatsApp template ${template.category.name} (#${template.id}) to Firestore")
             } catch (e: Exception) {
                 Log.w(TAG, "Error auto-syncing WhatsApp template: ${e.message}")
             }
+        }
+    }
+
+    suspend fun syncTemplatesFromFirebase(repository: ClinicRepository) = withContext(Dispatchers.IO) {
+        try {
+            val db = getFirestore() ?: return@withContext
+            val snapshot = db.collection("clinic_whatsapp_templates").get().await()
+            for (doc in snapshot.documents) {
+                val categoryStr = doc.safeString("category", doc.id)
+                val category = try {
+                    WhatsAppTemplateCategory.valueOf(categoryStr)
+                } catch (e: Exception) {
+                    continue
+                }
+                val title = doc.safeString("title", category.label)
+                val messageText = doc.safeString("messageText")
+                if (messageText.isBlank()) continue
+
+                val existing = repository.getTemplateByCategory(category)
+                val finalId = existing?.id ?: doc.safeLong("id") ?: 0L
+                val t = WhatsAppTemplateEntity(
+                    id = if (finalId > 0L) finalId else 0L,
+                    category = category,
+                    title = if (title.isNotBlank()) title else category.label,
+                    messageText = messageText
+                )
+                repository.saveTemplate(t)
+            }
+            Log.d(TAG, "Successfully restored templates from Firebase Firestore")
+        } catch (e: Exception) {
+            Log.w(TAG, "Error syncing templates from Firebase: ${e.message}")
         }
     }
 
@@ -624,6 +661,7 @@ object FirebaseSyncManager {
                                 if (dc.type == DocumentChange.Type.REMOVED) {
                                     repository.deleteAppointmentById(id)
                                     lastUpdatedMap.remove("appointment_$id")
+                                    appContext?.let { AppointmentAlarmScheduler.cancelReminder(it, id) }
                                 } else {
                                     val remoteUpdatedAt = doc.safeLong("updatedAt") ?: doc.safeLong("createdAt") ?: 0L
                                     val localTime = lastUpdatedMap["appointment_$id"] ?: 0L
@@ -686,6 +724,9 @@ object FirebaseSyncManager {
                                         createdAt = createdAt
                                     )
                                     repository.insertAppointment(app)
+                                    if (app.status == AppointmentStatus.CANCELLED || app.status == AppointmentStatus.NO_SHOW) {
+                                        appContext?.let { AppointmentAlarmScheduler.cancelReminder(it, app.id) }
+                                    }
                                 }
                             } catch (e: Exception) {
                                 Log.w(TAG, "Error processing appointment change: ${e.message}")
@@ -915,15 +956,32 @@ object FirebaseSyncManager {
                                 val doc = dc.document
                                 if (doc.metadata.hasPendingWrites()) continue
 
-                                val id = doc.safeLong("id") ?: doc.id.toLongOrNull() ?: continue
                                 if (dc.type != DocumentChange.Type.REMOVED) {
-                                    val categoryStr = doc.safeString("category", WhatsAppTemplateCategory.BEFORE_APPOINTMENT.name)
-                                    val category = try { WhatsAppTemplateCategory.valueOf(categoryStr) } catch (e: Exception) { WhatsAppTemplateCategory.BEFORE_APPOINTMENT }
-                                    val title = doc.safeString("title")
+                                    val categoryStr = doc.safeString("category", doc.id)
+                                    val category = try {
+                                        WhatsAppTemplateCategory.valueOf(categoryStr)
+                                    } catch (e: Exception) {
+                                        continue
+                                    }
+                                    val title = doc.safeString("title", category.label)
                                     val messageText = doc.safeString("messageText")
+                                    if (messageText.isBlank()) continue
 
-                                    val t = WhatsAppTemplateEntity(id = id, category = category, title = title, messageText = messageText)
-                                    repository.updateTemplate(t)
+                                    val existing = repository.getTemplateByCategory(category)
+                                    // If already identical to local DB, skip redundant update
+                                    if (existing != null && existing.messageText == messageText && existing.title == title) {
+                                        continue
+                                    }
+
+                                    val finalId = existing?.id ?: (doc.safeLong("id") ?: 0L)
+                                    val t = WhatsAppTemplateEntity(
+                                        id = if (finalId > 0L) finalId else 0L,
+                                        category = category,
+                                        title = if (title.isNotBlank()) title else category.label,
+                                        messageText = messageText
+                                    )
+                                    repository.saveTemplate(t)
+                                    Log.d(TAG, "Realtime synced template for category ${category.name} from Firestore")
                                 }
                             } catch (e: Exception) {
                                 Log.w(TAG, "Error processing template change: ${e.message}")
