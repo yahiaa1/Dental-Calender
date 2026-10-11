@@ -144,7 +144,7 @@ export const AppointmentModal: React.FC<Props> = ({
         startTime,
         endTime,
         price,
-        status: appointmentToEdit ? appointmentToEdit.status : 'CONFIRMED',
+        status: appointmentToEdit ? appointmentToEdit.status : 'UNCONFIRMED',
         patientClassification,
         notes: notes.trim(),
         bookedByUserId: currentUser.id,

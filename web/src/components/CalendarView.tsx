@@ -9,9 +9,11 @@ import {
   Grid,
   Columns,
   Move,
-  User,
   Eye,
-  EyeOff
+  EyeOff,
+  User,
+  Check,
+  X
 } from 'lucide-react';
 import type { Appointment, User as UserModel, WhatsAppTemplate, ClinicSettings, ProcedureConfig, Patient } from '../types';
 import { AppointmentDetailsModal } from './AppointmentDetailsModal';
@@ -123,14 +125,32 @@ export const CalendarView: React.FC<Props> = ({
     });
   };
 
-  const format12Hour = (time24: string) => {
+  const format12Hour = (time24?: string) => {
+    if (!time24) return '';
     try {
-      const [h, m] = time24.split(':').map(Number);
+      const clean = time24
+        .replace(/[٠۰]/g, '0')
+        .replace(/[١۱]/g, '1')
+        .replace(/[٢۲]/g, '2')
+        .replace(/[٣۳]/g, '3')
+        .replace(/[٤۴]/g, '4')
+        .replace(/[٥۵]/g, '5')
+        .replace(/[٦۶]/g, '6')
+        .replace(/[٧۷]/g, '7')
+        .replace(/[٨۸]/g, '8')
+        .replace(/[٩۹]/g, '9')
+        .trim();
+
+      const parts = clean.split(':').map(Number);
+      if (parts.length < 2 || isNaN(parts[0]) || isNaN(parts[1])) {
+        return time24;
+      }
+      const [h, m] = parts;
       const isPm = h >= 12;
       const h12 = h % 12 === 0 ? 12 : h % 12;
       return `${h12}:${m.toString().padStart(2, '0')} ${isPm ? 'م' : 'ص'}`;
     } catch {
-      return time24;
+      return time24 || '';
     }
   };
 
@@ -198,23 +218,142 @@ export const CalendarView: React.FC<Props> = ({
     return true;
   });
 
-  // Position calculation for timeline (minutes from startHour)
-  const getAppointmentTopAndHeight = (app: Appointment) => {
-    try {
-      const [h1, m1] = app.startTime.split(':').map(Number);
-      const [h2, m2] = app.endTime.split(':').map(Number);
+  interface LayoutAppointment {
+    app: Appointment;
+    top: number;
+    height: number;
+    duration: number;
+    startMinutes: number;
+    endMinutes: number;
+    colIndex: number;
+    totalColumns: number;
+  }
 
-      const startMinutes = (h1 - startHour) * 60 + m1;
-      const endMinutes = (h2 - startHour) * 60 + m2;
-      const duration = Math.max(endMinutes - startMinutes, 25);
+  // Calculate overlapping appointment columns so concurrent appointments sit side-by-side
+  const computeAppointmentLayouts = (apps: Appointment[]): LayoutAppointment[] => {
+    if (apps.length === 0) return [];
 
-      const top = (startMinutes / 60) * hourHeight;
-      const height = Math.max((duration / 60) * hourHeight, 36);
+    const items: LayoutAppointment[] = apps.map(app => {
+      try {
+        const cleanStart = (app.startTime || '')
+          .replace(/[٠۰]/g, '0')
+          .replace(/[١۱]/g, '1')
+          .replace(/[٢۲]/g, '2')
+          .replace(/[٣۳]/g, '3')
+          .replace(/[٤۴]/g, '4')
+          .replace(/[٥۵]/g, '5')
+          .replace(/[٦۶]/g, '6')
+          .replace(/[٧۷]/g, '7')
+          .replace(/[٨۸]/g, '8')
+          .replace(/[٩۹]/g, '9')
+          .trim();
+        const cleanEnd = (app.endTime || '')
+          .replace(/[٠۰]/g, '0')
+          .replace(/[١۱]/g, '1')
+          .replace(/[٢۲]/g, '2')
+          .replace(/[٣۳]/g, '3')
+          .replace(/[٤۴]/g, '4')
+          .replace(/[٥۵]/g, '5')
+          .replace(/[٦۶]/g, '6')
+          .replace(/[٧۷]/g, '7')
+          .replace(/[٨۸]/g, '8')
+          .replace(/[٩۹]/g, '9')
+          .trim();
 
-      return { top: Math.max(top, 0), height };
-    } catch {
-      return { top: 0, height: hourHeight };
+        const [h1, m1] = cleanStart.split(':').map(Number);
+        const [h2, m2] = cleanEnd.split(':').map(Number);
+
+        if (isNaN(h1) || isNaN(m1) || isNaN(h2) || isNaN(m2)) {
+          throw new Error('Invalid time');
+        }
+
+        const startMinutes = (h1 - startHour) * 60 + m1;
+        const endMinutes = (h2 - startHour) * 60 + m2;
+        const rawDuration = endMinutes - startMinutes;
+        const duration = Math.max(rawDuration, 5);
+        const top = (startMinutes / 60) * hourHeight;
+        const height = (duration / 60) * hourHeight;
+
+        if (isNaN(top) || isNaN(height)) {
+          throw new Error('Invalid layout calculations');
+        }
+
+        return {
+          app,
+          top: Math.max(top, 0),
+          height,
+          duration,
+          startMinutes,
+          endMinutes: startMinutes + duration,
+          colIndex: 0,
+          totalColumns: 1
+        };
+      } catch {
+        return {
+          app,
+          top: 0,
+          height: hourHeight,
+          duration: 60,
+          startMinutes: 0,
+          endMinutes: 60,
+          colIndex: 0,
+          totalColumns: 1
+        };
+      }
+    });
+
+    // Sort by start time ascending, then longer duration first
+    items.sort((a, b) => {
+      if (a.startMinutes !== b.startMinutes) return a.startMinutes - b.startMinutes;
+      return b.duration - a.duration;
+    });
+
+    // Group into connected overlapping clusters
+    const clusters: LayoutAppointment[][] = [];
+    let currentCluster: LayoutAppointment[] = [];
+    let clusterEnd = -1;
+
+    for (const item of items) {
+      if (currentCluster.length > 0 && item.startMinutes >= clusterEnd) {
+        clusters.push(currentCluster);
+        currentCluster = [item];
+        clusterEnd = item.endMinutes;
+      } else {
+        currentCluster.push(item);
+        clusterEnd = Math.max(clusterEnd, item.endMinutes);
+      }
     }
+    if (currentCluster.length > 0) {
+      clusters.push(currentCluster);
+    }
+
+    // Greedily assign columns to overlapping items within each cluster
+    for (const cluster of clusters) {
+      const colEndTimes: number[] = [];
+
+      for (const item of cluster) {
+        let placedCol = -1;
+        for (let c = 0; c < colEndTimes.length; c++) {
+          if (colEndTimes[c] <= item.startMinutes) {
+            placedCol = c;
+            colEndTimes[c] = item.endMinutes;
+            break;
+          }
+        }
+        if (placedCol === -1) {
+          placedCol = colEndTimes.length;
+          colEndTimes.push(item.endMinutes);
+        }
+        item.colIndex = placedCol;
+      }
+
+      const totalCols = colEndTimes.length;
+      for (const item of cluster) {
+        item.totalColumns = totalCols;
+      }
+    }
+
+    return items;
   };
 
   // Drag and Drop Handler (Move appointment)
@@ -226,7 +365,7 @@ export const CalendarView: React.FC<Props> = ({
     try {
       const [h1, m1] = app.startTime.split(':').map(Number);
       const [h2, m2] = app.endTime.split(':').map(Number);
-      const originalDuration = Math.max((h2 * 60 + m2) - (h1 * 60 + m1), 20);
+      const originalDuration = Math.max((h2 * 60 + m2) - (h1 * 60 + m1), 10);
 
       const newStartHour = targetHour;
       const newStartMinute = 0;
@@ -812,7 +951,6 @@ export const CalendarView: React.FC<Props> = ({
                         justifyContent: 'center',
                         color: 'white',
                         fontWeight: 800,
-                        fontSize: '0.85rem',
                         boxShadow: '0 4px 16px var(--primary-glow)',
                         textShadow: '0 1px 3px rgba(0,0,0,0.6)'
                       }}
@@ -822,10 +960,11 @@ export const CalendarView: React.FC<Props> = ({
                   )}
 
                   {/* Positioned Appointments Cards with Procedure Color and Status in Brackets */}
-                  {appsForDate.map(app => {
-                    const { top, height } = getAppointmentTopAndHeight(app);
+                  {computeAppointmentLayouts(appsForDate).map(item => {
+                    const { app, top, height, duration, colIndex, totalColumns } = item;
                     const isDraggingThis = draggedAppointmentId === app.id;
                     const isCancelled = app.status === 'CANCELLED';
+                    const isLessThanHour = duration < 60;
 
                     // Procedure color remains constant and does NOT change when status changes!
                     const proc = procedures.find(p => p.name === app.procedureName);
@@ -841,6 +980,27 @@ export const CalendarView: React.FC<Props> = ({
                       NO_SHOW: 'لم يحضر'
                     };
                     const statusText = statusLabels[app.status] || app.status;
+
+                    const N = totalColumns;
+                    const colIdx = colIndex;
+                    const isMultiCol = N > 1;
+
+                    // Side-by-side Google Calendar style positioning
+                    const colWidthPercent = 100 / N;
+                    const rightPercent = colIdx * colWidthPercent;
+
+                    const rightStyle = N === 1
+                      ? '4px'
+                      : `calc(${rightPercent}% + 2px)`;
+
+                    const widthStyle = N === 1
+                      ? 'calc(100% - 8px)'
+                      : `calc(${colWidthPercent}% - 4px)`;
+
+                    // Clear boundary: top + 2 and height - 4 ensures the card ends 2px BEFORE the slot divider line
+                    const cardTop = top + 2;
+                    const cardHeight = Math.max(height - 4, 14);
+                    const isVeryShort = cardHeight < 28;
 
                     return (
                       <div
@@ -865,22 +1025,26 @@ export const CalendarView: React.FC<Props> = ({
                         }}
                         style={{
                           position: 'absolute',
-                          top: `${top + 1}px`,
-                          height: `${Math.max(height - 3, 34)}px`,
-                          right: '6px',
-                          left: '6px',
-                          background: isCancelled ? 'rgba(239, 68, 68, 0.85)' : procColor,
-                          border: isCancelled ? '1.5px dashed #ef4444' : `1px solid rgba(255, 255, 255, 0.2)`,
-                          borderRight: isCancelled ? '5px solid #ef4444' : '5px solid rgba(255, 255, 255, 0.55)',
-                          borderBottom: isCancelled ? '2.5px solid #b91c1c' : '2.5px solid rgba(0, 0, 0, 0.35)',
-                          borderRadius: '8px',
-                          padding: '6px 12px',
+                          top: `${cardTop}px`,
+                          height: `${cardHeight}px`,
+                          right: rightStyle,
+                          left: 'auto',
+                          width: widthStyle,
+                          background: isCancelled ? 'rgba(239, 68, 68, 0.88)' : procColor,
+                          border: isCancelled ? '1.5px dashed #ef4444' : `1px solid rgba(255, 255, 255, 0.22)`,
+                          borderRight: isCancelled ? '4px solid #ef4444' : '4px solid rgba(255, 255, 255, 0.75)',
+                          borderBottom: isCancelled ? '1px solid #b91c1c' : '1px solid rgba(0, 0, 0, 0.25)',
+                          borderRadius: '6px',
+                          padding: isVeryShort ? '1px 6px' : '4px 8px',
                           cursor: 'grab',
-                          boxShadow: '0 4px 12px rgba(0,0,0,0.25)',
+                          boxShadow: '0 1px 3px rgba(0,0,0,0.18)',
                           display: 'flex',
-                          flexDirection: 'column',
-                          justifyContent: 'space-between',
+                          flexDirection: isVeryShort ? 'row' : 'column',
+                          justifyContent: isVeryShort ? 'space-between' : 'flex-start',
+                          alignItems: isVeryShort ? 'center' : 'stretch',
+                          gap: isVeryShort ? '4px' : '2px',
                           overflow: 'hidden',
+                          boxSizing: 'border-box',
                           zIndex: 10,
                           opacity: isCancelled ? 0.7 : (isDraggingThis ? 0.4 : 1),
                           transition: 'transform 0.15s, box-shadow 0.15s'
@@ -888,80 +1052,278 @@ export const CalendarView: React.FC<Props> = ({
                         onMouseEnter={e => {
                           if (!isDraggingThis) {
                             e.currentTarget.style.transform = 'translateY(-2px)';
-                            e.currentTarget.style.boxShadow = '0 8px 20px rgba(0,0,0,0.4)';
+                            e.currentTarget.style.boxShadow = '0 4px 10px rgba(0,0,0,0.3)';
                           }
                         }}
                         onMouseLeave={e => {
                           if (!isDraggingThis) {
                             e.currentTarget.style.transform = 'none';
-                            e.currentTarget.style.boxShadow = '0 4px 12px rgba(0,0,0,0.25)';
+                            e.currentTarget.style.boxShadow = '0 1px 3px rgba(0,0,0,0.18)';
                           }
                         }}
-                        title="اسحب لنقل الموعد لساعة أخرى، أو اضغط لعرض التفاصيل"
+                        title={`${app.patientName} (${format12Hour(app.startTime)} - ${format12Hour(app.endTime)}) - ${app.procedureName} [${statusText}] | المسئول: ${app.bookedByUserName || 'طاقم العمل'}${app.price > 0 ? ` | ${app.price} ج.م` : ''}`}
                       >
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                            <Move size={13} color="rgba(255,255,255,0.75)" />
-                            <span style={{
-                              fontWeight: 800,
-                              fontSize: '0.95rem',
-                              color: '#ffffff',
-                              textDecoration: isCancelled ? 'line-through' : 'none'
-                            }}>
-                              {app.patientName}
-                            </span>
-                          </div>
-
-                          <span style={{
-                            fontSize: '0.75rem',
-                            fontWeight: 700,
-                            color: '#ffffff',
+                        {isVeryShort ? (
+                          // 1-line layout for 15-min cards
+                          <div style={{
                             display: 'flex',
                             alignItems: 'center',
-                            gap: '4px'
+                            justifyContent: 'space-between',
+                            width: '100%',
+                            gap: '4px',
+                            minWidth: 0
                           }}>
-                            <Clock size={12} />
-                            {format12Hour(app.startTime)} - {format12Hour(app.endTime)}
-                          </span>
-                        </div>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 3, minWidth: 0, flex: 1, overflow: 'hidden' }}>
+                              <Move size={10} color="rgba(255,255,255,0.75)" style={{ flexShrink: 0 }} />
+                              <span style={{
+                                fontWeight: 800,
+                                fontSize: '0.76rem',
+                                color: '#ffffff',
+                                whiteSpace: 'nowrap',
+                                overflow: 'hidden',
+                                textOverflow: 'ellipsis',
+                                textDecoration: isCancelled ? 'line-through' : 'none',
+                                lineHeight: 1
+                              }}>
+                                {app.patientName}
+                              </span>
+                              {app.status === 'CONFIRMED' && (
+                                <span title="مؤكد" style={{
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'center',
+                                  background: '#10b981',
+                                  color: '#ffffff',
+                                  borderRadius: '50%',
+                                  width: 13,
+                                  height: 13,
+                                  flexShrink: 0,
+                                  boxShadow: '0 1px 2px rgba(0,0,0,0.2)'
+                                }}>
+                                  <Check size={8} strokeWidth={3} />
+                                </span>
+                              )}
+                              {app.status === 'UNCONFIRMED' && (
+                                <span title="لم يتم التاكيد" style={{
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'center',
+                                  background: '#ef4444',
+                                  color: '#ffffff',
+                                  borderRadius: '50%',
+                                  width: 13,
+                                  height: 13,
+                                  flexShrink: 0,
+                                  boxShadow: '0 1px 2px rgba(0,0,0,0.2)'
+                                }}>
+                                  <X size={8} strokeWidth={3} />
+                                </span>
+                              )}
+                            </div>
 
-                        {/* Visible Separator Line Between Patient & Procedure */}
-                        <div style={{
-                          height: '1px',
-                          background: 'rgba(255, 255, 255, 0.35)',
-                          margin: '3px 0',
-                          width: '100%',
-                          boxShadow: '0 1px 0 rgba(0, 0, 0, 0.15)'
-                        }} />
-
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                          {/* Procedure Name with Status in Brackets (Color doesn't change with status) */}
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                            <span style={{ fontSize: '0.86rem', color: '#ffffff', fontWeight: 800 }}>
-                              {app.procedureName}
-                            </span>
-                            <span style={{
-                              fontSize: '0.72rem',
-                              background: 'rgba(0, 0, 0, 0.25)',
-                              border: '1px solid rgba(255, 255, 255, 0.35)',
-                              color: '#ffffff',
-                              padding: '1px 6px',
-                              borderRadius: '4px',
-                              fontWeight: 700
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '4px', flexShrink: 0 }}>
+                              <span style={{
+                                fontSize: '0.66rem',
+                                fontWeight: 700,
+                                color: '#ffffff',
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '2px',
+                                lineHeight: 1
+                              }}>
+                                <Clock size={10} />
+                                {format12Hour(app.startTime)} - {format12Hour(app.endTime)}
+                              </span>
+                              {!isMultiCol && (
+                                <span style={{
+                                  fontSize: '0.64rem',
+                                  color: 'rgba(255,255,255,0.92)',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  gap: '2px',
+                                  maxWidth: '85px',
+                                  overflow: 'hidden',
+                                  textOverflow: 'ellipsis',
+                                  whiteSpace: 'nowrap',
+                                  lineHeight: 1
+                                }}>
+                                  <User size={9} />
+                                  {app.bookedByUserName || 'طاقم العمل'}
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        ) : (
+                          // Google Calendar style: Title on Line 1, Time & Staff on Line 2, Procedure & Price on Line 3
+                          <>
+                            <div style={{
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'space-between',
+                              gap: '4px',
+                              minWidth: 0
                             }}>
-                              [{statusText}]
-                            </span>
-                          </div>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 4, minWidth: 0, flex: 1, overflow: 'hidden' }}>
+                                <Move size={11} color="rgba(255,255,255,0.7)" style={{ flexShrink: 0 }} />
+                                <span style={{
+                                  fontWeight: 800,
+                                  fontSize: isMultiCol ? '0.82rem' : '0.88rem',
+                                  color: '#ffffff',
+                                  whiteSpace: 'nowrap',
+                                  overflow: 'hidden',
+                                  textOverflow: 'ellipsis',
+                                  textDecoration: isCancelled ? 'line-through' : 'none',
+                                  lineHeight: 1.2
+                                }}>
+                                  {app.patientName}
+                                </span>
 
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                            <span style={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.9)', display: 'flex', alignItems: 'center', gap: 3 }}>
-                              <User size={11} /> {app.bookedByUserName || 'طاقم العمل'}
-                            </span>
-                            <span style={{ fontSize: '0.8rem', fontWeight: 800, color: '#a7f3d0' }}>
-                              {app.price} ج.م
-                            </span>
-                          </div>
-                        </div>
+                                {/* Status icon (Check / X) for appointments under 1 hour */}
+                                {isLessThanHour && app.status === 'CONFIRMED' && (
+                                  <span title="مؤكد" style={{
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    background: '#10b981',
+                                    color: '#ffffff',
+                                    borderRadius: '50%',
+                                    width: 15,
+                                    height: 15,
+                                    flexShrink: 0,
+                                    boxShadow: '0 1px 2px rgba(0,0,0,0.25)'
+                                  }}>
+                                    <Check size={10} strokeWidth={3} />
+                                  </span>
+                                )}
+                                {isLessThanHour && app.status === 'UNCONFIRMED' && (
+                                  <span title="لم يتم التاكيد" style={{
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    background: '#ef4444',
+                                    color: '#ffffff',
+                                    borderRadius: '50%',
+                                    width: 15,
+                                    height: 15,
+                                    flexShrink: 0,
+                                    boxShadow: '0 1px 2px rgba(0,0,0,0.25)'
+                                  }}>
+                                    <X size={10} strokeWidth={3} />
+                                  </span>
+                                )}
+                              </div>
+
+                              {cardHeight < 62 && app.price > 0 && (
+                                <span style={{ fontSize: '0.75rem', fontWeight: 800, color: '#a7f3d0', flexShrink: 0 }}>
+                                  {app.price} ج.م
+                                </span>
+                              )}
+                            </div>
+
+                            {/* Line 2: Time badge on right, Procedure in middle, Staff on left */}
+                            <div style={{
+                              fontSize: isMultiCol ? '0.67rem' : '0.72rem',
+                              fontWeight: 600,
+                              color: 'rgba(255, 255, 255, 0.95)',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'space-between',
+                              gap: '4px',
+                              minWidth: 0,
+                              overflow: 'hidden'
+                            }}>
+                              <div style={{
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '4px',
+                                minWidth: 0,
+                                overflow: 'hidden',
+                                textOverflow: 'ellipsis',
+                                whiteSpace: 'nowrap',
+                                flex: 1
+                              }}>
+                                <div style={{
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  gap: '3px',
+                                  flexShrink: 0,
+                                  whiteSpace: 'nowrap'
+                                }}>
+                                  <Clock size={10} style={{ flexShrink: 0 }} />
+                                  <span>{format12Hour(app.startTime)} - {format12Hour(app.endTime)}</span>
+                                </div>
+
+                                {cardHeight < 62 && app.procedureName && (
+                                  <span style={{
+                                    overflow: 'hidden',
+                                    textOverflow: 'ellipsis',
+                                    whiteSpace: 'nowrap',
+                                    opacity: 0.92,
+                                    fontSize: isMultiCol ? '0.65rem' : '0.7rem',
+                                    fontWeight: 700
+                                  }}>
+                                    • {app.procedureName}
+                                  </span>
+                                )}
+                              </div>
+
+                              <div style={{
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '2px',
+                                minWidth: 0,
+                                maxWidth: isMultiCol ? '65px' : '100px',
+                                overflow: 'hidden',
+                                textOverflow: 'ellipsis',
+                                whiteSpace: 'nowrap',
+                                opacity: 0.95,
+                                flexShrink: 0
+                              }}>
+                                <User size={10} style={{ flexShrink: 0 }} />
+                                <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                  {app.bookedByUserName || 'طاقم العمل'}
+                                </span>
+                              </div>
+                            </div>
+
+                            {/* Line 3: Procedure name & status & price (visible for >= 1 hour appointments) */}
+                            {cardHeight >= 62 && (
+                              <div style={{
+                                marginTop: 'auto',
+                                paddingTop: '2px',
+                                borderTop: '1px solid rgba(255, 255, 255, 0.22)',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'space-between',
+                                fontSize: isMultiCol ? '0.68rem' : '0.72rem',
+                                color: '#ffffff',
+                                gap: '4px',
+                                minWidth: 0
+                              }}>
+                                <div style={{
+                                  whiteSpace: 'nowrap',
+                                  overflow: 'hidden',
+                                  textOverflow: 'ellipsis',
+                                  fontWeight: 700,
+                                  minWidth: 0,
+                                  flex: 1,
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  gap: '4px'
+                                }}>
+                                  <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{app.procedureName}</span>
+                                  <span style={{ opacity: 0.85, fontSize: '0.65rem' }}>[{statusText}]</span>
+                                </div>
+
+                                {app.price > 0 && (
+                                  <span style={{ fontWeight: 800, color: '#a7f3d0', flexShrink: 0 }}>
+                                    {app.price} ج.م
+                                  </span>
+                                )}
+                              </div>
+                            )}
+                          </>
+                        )}
                       </div>
                     );
                   })}

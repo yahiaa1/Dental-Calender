@@ -3,12 +3,30 @@ package com.example.utils
 object TimeFormatter {
 
     /**
+     * Converts Arabic-Indic digits to Western digits (0-9)
+     */
+    fun normalizeArabicDigits(input: String): String {
+        return input
+            .replace('٠', '0')
+            .replace('١', '1')
+            .replace('٢', '2')
+            .replace('٣', '3')
+            .replace('٤', '4')
+            .replace('٥', '5')
+            .replace('٦', '6')
+            .replace('٧', '7')
+            .replace('٨', '8')
+            .replace('٩', '9')
+    }
+
+    /**
      * Converts a 24-hour time string like "09:00" or "14:30" or "21:00"
      * into a beautiful Arabic 12-hour format string like "09:00 ص" or "02:30 م".
      */
     fun format12Hour(time24: String): String {
         return try {
-            val parts = time24.trim().split(":")
+            val clean = normalizeArabicDigits(time24.trim())
+            val parts = clean.split(":")
             if (parts.size < 2) return time24
             val hour24 = parts[0].toInt()
             val minute = parts[1].toInt()
@@ -20,7 +38,7 @@ object TimeFormatter {
                 else -> hour24
             }
             val period = if (isPm) "م" else "ص"
-            String.format("%02d:%02d %s", hour12, minute, period)
+            java.lang.String.format(java.util.Locale.US, "%02d:%02d %s", hour12, minute, period)
         } catch (e: Exception) {
             time24
         }
@@ -41,7 +59,7 @@ object TimeFormatter {
             else -> hour24
         }
         val period = if (isPm) "م" else "ص"
-        return String.format("%02d:00 %s", hour12, period)
+        return java.lang.String.format(java.util.Locale.US, "%02d:00 %s", hour12, period)
     }
 
     /**

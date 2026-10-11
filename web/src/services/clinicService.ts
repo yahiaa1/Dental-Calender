@@ -23,6 +23,36 @@ export const generateUniqueId = (): number => {
   return Date.now() * 1000 + Math.floor(Math.random() * 1000);
 };
 
+export const normalizeArabicNumerals = (str?: any): string => {
+  if (str === null || str === undefined) return '';
+  return String(str)
+    .replace(/[٠۰]/g, '0')
+    .replace(/[١۱]/g, '1')
+    .replace(/[٢۲]/g, '2')
+    .replace(/[٣۳]/g, '3')
+    .replace(/[٤۴]/g, '4')
+    .replace(/[٥۵]/g, '5')
+    .replace(/[٦۶]/g, '6')
+    .replace(/[٧۷]/g, '7')
+    .replace(/[٨۸]/g, '8')
+    .replace(/[٩۹]/g, '9');
+};
+
+export const normalizeTime = (timeStr?: any): string => {
+  if (!timeStr) return '00:00';
+  const clean = normalizeArabicNumerals(timeStr).trim();
+  const parts = clean.split(':').map(Number);
+  if (parts.length >= 2 && !isNaN(parts[0]) && !isNaN(parts[1])) {
+    return `${String(parts[0]).padStart(2, '0')}:${String(parts[1]).padStart(2, '0')}`;
+  }
+  return clean || '00:00';
+};
+
+export const normalizeDate = (dateStr?: any): string => {
+  if (!dateStr) return '';
+  return normalizeArabicNumerals(dateStr).trim();
+};
+
 // ==================== APPOINTMENTS ====================
 export const subscribeAppointments = (callback: (appointments: Appointment[]) => void) => {
   const colRef = collection(db, 'clinic_appointments');
@@ -38,9 +68,9 @@ export const subscribeAppointments = (callback: (appointments: Appointment[]) =>
         patientPhone: data.patientPhone || '',
         procedureName: data.procedureName || '',
         chairNumber: data.chairNumber || 1,
-        dateStr: data.dateStr || '',
-        startTime: data.startTime || '',
-        endTime: data.endTime || '',
+        dateStr: normalizeDate(data.dateStr),
+        startTime: normalizeTime(data.startTime),
+        endTime: normalizeTime(data.endTime),
         price: Number(data.price) || 0,
         status: data.status || 'UNCONFIRMED',
         patientClassification: data.patientClassification || 'DISCIPLINED',
@@ -67,6 +97,10 @@ export const saveAppointment = async (
   const now = Date.now();
   const data = {
     ...appointment,
+    dateStr: normalizeDate(appointment.dateStr),
+    startTime: normalizeTime(appointment.startTime),
+    endTime: normalizeTime(appointment.endTime),
+    price: Number(appointment.price) || 0,
     updatedAt: now
   };
   await setDoc(docRef, data, { merge: true });
@@ -80,8 +114,8 @@ export const saveAppointment = async (
     userRole: currentUser.role,
     timestamp: now,
     details: actionType === 'BOOKING'
-      ? `قام ${currentUser.name} بحجز موعد جديد للمريض ${appointment.patientName} (${appointment.procedureName}) يوم ${appointment.dateStr} الساعة ${appointment.startTime}`
-      : `قام ${currentUser.name} بتعديل موعد المريض ${appointment.patientName} ليوم ${appointment.dateStr} الساعة ${appointment.startTime}`,
+      ? `قام ${currentUser.name} بحجز موعد جديد للمريض ${appointment.patientName} (${appointment.procedureName}) يوم ${data.dateStr} الساعة ${data.startTime}`
+      : `قام ${currentUser.name} بتعديل موعد المريض ${appointment.patientName} ليوم ${data.dateStr} الساعة ${data.startTime}`,
     extraInfo: actionType === 'BOOKING' ? 'حجز جديد من الويب' : 'تعديل موعد من الويب'
   });
 };
@@ -128,11 +162,15 @@ export const moveAppointment = async (
   const idStr = appointment.id.toString();
   const docRef = doc(db, 'clinic_appointments', idStr);
   const now = Date.now();
+  const cleanDate = normalizeDate(newDate);
+  const cleanStart = normalizeTime(newStartTime);
+  const cleanEnd = normalizeTime(newEndTime);
+
   const updatedApp: Appointment = {
     ...appointment,
-    dateStr: newDate,
-    startTime: newStartTime,
-    endTime: newEndTime,
+    dateStr: cleanDate,
+    startTime: cleanStart,
+    endTime: cleanEnd,
     updatedAt: now
   };
   await setDoc(docRef, updatedApp, { merge: true });

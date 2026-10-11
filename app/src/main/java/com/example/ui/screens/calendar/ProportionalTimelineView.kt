@@ -300,8 +300,8 @@ fun ProportionalTimelineView(
         val endHour = (workStartHour + state.targetEndMins / 60).coerceIn(startHour, workEndHour)
         val endMin = state.targetEndMins % 60
 
-        val newStartTimeStr = String.format("%02d:%02d", startHour, startMin)
-        val newEndTimeStr = String.format("%02d:%02d", endHour, endMin)
+        val newStartTimeStr = java.lang.String.format(java.util.Locale.US, "%02d:%02d", startHour, startMin)
+        val newEndTimeStr = java.lang.String.format(java.util.Locale.US, "%02d:%02d", endHour, endMin)
         val newDateStr = DateUtils.toDateString(state.targetDate)
 
         if (newStartTimeStr != state.appointment.startTime ||
@@ -1115,7 +1115,8 @@ private fun ZoomPresetPill(label: String, isSelected: Boolean, onClick: () -> Un
 
 private fun parseTimeToHourAndMinute(timeStr: String): Pair<Int, Int> {
     return try {
-        val parts = timeStr.split(":")
+        val clean = TimeFormatter.normalizeArabicDigits(timeStr.trim())
+        val parts = clean.split(":")
         Pair(parts[0].toInt(), parts[1].toInt())
     } catch (e: Exception) {
         Pair(10, 0)

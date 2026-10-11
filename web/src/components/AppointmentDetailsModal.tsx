@@ -115,20 +115,60 @@ export const AppointmentDetailsModal: React.FC<Props> = ({
   };
 
   const format12Hour = (time24: string) => {
+    if (!time24) return '';
     try {
-      const [h, m] = time24.split(':').map(Number);
+      const clean = time24
+        .replace(/[٠۰]/g, '0')
+        .replace(/[١۱]/g, '1')
+        .replace(/[٢۲]/g, '2')
+        .replace(/[٣۳]/g, '3')
+        .replace(/[٤۴]/g, '4')
+        .replace(/[٥۵]/g, '5')
+        .replace(/[٦۶]/g, '6')
+        .replace(/[٧۷]/g, '7')
+        .replace(/[٨۸]/g, '8')
+        .replace(/[٩۹]/g, '9')
+        .trim();
+      const parts = clean.split(':').map(Number);
+      if (parts.length < 2 || isNaN(parts[0]) || isNaN(parts[1])) {
+        return time24;
+      }
+      const [h, m] = parts;
       const isPm = h >= 12;
       const h12 = h % 12 === 0 ? 12 : h % 12;
       return `${h12}:${m.toString().padStart(2, '0')} ${isPm ? 'م' : 'ص'}`;
     } catch {
-      return time24;
+      return time24 || '';
     }
   };
 
   const calculateDuration = () => {
     try {
-      const [h1, m1] = appointment.startTime.split(':').map(Number);
-      const [h2, m2] = appointment.endTime.split(':').map(Number);
+      const cleanStart = (appointment.startTime || '')
+        .replace(/[٠۰]/g, '0')
+        .replace(/[١۱]/g, '1')
+        .replace(/[٢۲]/g, '2')
+        .replace(/[٣۳]/g, '3')
+        .replace(/[٤۴]/g, '4')
+        .replace(/[٥۵]/g, '5')
+        .replace(/[٦۶]/g, '6')
+        .replace(/[٧۷]/g, '7')
+        .replace(/[٨۸]/g, '8')
+        .replace(/[٩۹]/g, '9');
+      const cleanEnd = (appointment.endTime || '')
+        .replace(/[٠۰]/g, '0')
+        .replace(/[١۱]/g, '1')
+        .replace(/[٢۲]/g, '2')
+        .replace(/[٣۳]/g, '3')
+        .replace(/[٤۴]/g, '4')
+        .replace(/[٥۵]/g, '5')
+        .replace(/[٦۶]/g, '6')
+        .replace(/[٧۷]/g, '7')
+        .replace(/[٨۸]/g, '8')
+        .replace(/[٩۹]/g, '9');
+      const [h1, m1] = cleanStart.split(':').map(Number);
+      const [h2, m2] = cleanEnd.split(':').map(Number);
+      if (isNaN(h1) || isNaN(m1) || isNaN(h2) || isNaN(m2)) return 30;
       const dur = (h2 * 60 + m2) - (h1 * 60 + m1);
       return dur > 0 ? dur : 30;
     } catch {

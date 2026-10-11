@@ -517,7 +517,8 @@ fun AddEditAppointmentScreen(
                         .clip(RoundedCornerShape(10.dp))
                         .clickable {
                             val (h, m) = try {
-                                val parts = startTime.split(":")
+                                val clean = TimeFormatter.normalizeArabicDigits(startTime)
+                                val parts = clean.split(":")
                                 Pair(parts[0].toInt(), parts[1].toInt())
                             } catch (e: Exception) {
                                 Pair(10, 0)
@@ -525,13 +526,13 @@ fun AddEditAppointmentScreen(
                             android.app.TimePickerDialog(
                                 context,
                                 { _, hourOfDay, minute ->
-                                    val newStart = String.format("%02d:%02d", hourOfDay, minute)
+                                    val newStart = java.lang.String.format(java.util.Locale.US, "%02d:%02d", hourOfDay, minute)
                                     startTime = newStart
                                     // Automatically calculate end time (+45 minutes)
                                     val totalMins = hourOfDay * 60 + minute + 45
                                     val endH = (totalMins / 60) % 24
                                     val endM = totalMins % 60
-                                    endTime = String.format("%02d:%02d", endH, endM)
+                                    endTime = java.lang.String.format(java.util.Locale.US, "%02d:%02d", endH, endM)
                                 },
                                 h,
                                 m,
@@ -566,7 +567,8 @@ fun AddEditAppointmentScreen(
                         .clip(RoundedCornerShape(10.dp))
                         .clickable {
                             val (h, m) = try {
-                                val parts = endTime.split(":")
+                                val clean = TimeFormatter.normalizeArabicDigits(endTime)
+                                val parts = clean.split(":")
                                 Pair(parts[0].toInt(), parts[1].toInt())
                             } catch (e: Exception) {
                                 Pair(10, 45)
@@ -574,7 +576,7 @@ fun AddEditAppointmentScreen(
                             android.app.TimePickerDialog(
                                 context,
                                 { _, hourOfDay, minute ->
-                                    endTime = String.format("%02d:%02d", hourOfDay, minute)
+                                    endTime = java.lang.String.format(java.util.Locale.US, "%02d:%02d", hourOfDay, minute)
                                 },
                                 h,
                                 m,
@@ -657,9 +659,9 @@ fun AddEditAppointmentScreen(
                         val snapped = ((newMinsFloat / 15f).roundToInt() * 15).coerceIn(8 * 60, 23 * 60)
                         val h = snapped / 60
                         val m = snapped % 60
-                        startTime = String.format("%02d:%02d", h, m)
+                        startTime = java.lang.String.format(java.util.Locale.US, "%02d:%02d", h, m)
                         val endTotal = (snapped + currentDurationMinutes).coerceAtMost(24 * 60 - 1)
-                        endTime = String.format("%02d:%02d", endTotal / 60, endTotal % 60)
+                        endTime = java.lang.String.format(java.util.Locale.US, "%02d:%02d", endTotal / 60, endTotal % 60)
                     },
                     valueRange = (8f * 60f)..(23f * 60f),
                     steps = ((23 - 8) * 4) - 1,
