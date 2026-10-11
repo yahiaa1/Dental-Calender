@@ -1,0 +1,9 @@
+services:
+  dental-calendar:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: dental_calendar_app
+    restart: unless-stopped
+    ports:
+      - "3000:80"
