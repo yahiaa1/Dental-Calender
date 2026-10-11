@@ -1,5 +1,6 @@
 services:
   dental-calendar:
+    image: ghcr.io/yahiaa1/dental-calender:latest
     build:
       context: .
       dockerfile: Dockerfile
