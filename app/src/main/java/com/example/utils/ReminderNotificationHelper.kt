@@ -116,8 +116,10 @@ object ReminderNotificationHelper {
         val formattedPhone = if (cleanPhone.startsWith("0")) "20" + cleanPhone.substring(1) else cleanPhone
         val whatsappMsg = if (customMessage.isNotBlank()) customMessage else "مرحباً $patientName، نذكرك بموعدك في العيادة بعد ساعة في تمام $timeFormatted12."
         val whatsappUri = Uri.parse("https://api.whatsapp.com/send?phone=$formattedPhone&text=${Uri.encode(whatsappMsg)}")
+        val targetPackage = ClinicActions.getWhatsAppPackage(context)
         val whatsappIntent = Intent(Intent.ACTION_VIEW, whatsappUri).apply {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK
+            targetPackage?.let { setPackage(it) }
         }
         val whatsappPendingIntent = PendingIntent.getActivity(
             context,

@@ -317,6 +317,25 @@ object DateUtils {
 }
 
 object ClinicActions {
+    fun isPackageInstalled(context: Context, packageName: String): Boolean {
+        return try {
+            context.packageManager.getPackageInfo(packageName, 0)
+            true
+        } catch (e: Exception) {
+            false
+        }
+    }
+
+    fun getWhatsAppPackage(context: Context): String? {
+        val businessPackage = "com.whatsapp.w4b"
+        val normalPackage = "com.whatsapp"
+        return when {
+            isPackageInstalled(context, businessPackage) -> businessPackage
+            isPackageInstalled(context, normalPackage) -> normalPackage
+            else -> null
+        }
+    }
+
     fun openWhatsApp(context: Context, rawPhone: String, messageText: String) {
         try {
             var phone = rawPhone.replace(Regex("[^0-9+]"), "")
@@ -325,14 +344,29 @@ object ClinicActions {
             }
             val encodedMessage = Uri.encode(messageText)
             val uri = Uri.parse("https://wa.me/$phone?text=$encodedMessage")
-            val intent = Intent(Intent.ACTION_VIEW, uri)
-            intent.setPackage("com.whatsapp")
+            val targetPackage = getWhatsAppPackage(context)
+            val intent = Intent(Intent.ACTION_VIEW, uri).apply {
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                targetPackage?.let { setPackage(it) }
+            }
             try {
                 context.startActivity(intent)
             } catch (e: Exception) {
-                // Try without package if WA business or browser
-                val fallbackIntent = Intent(Intent.ACTION_VIEW, uri)
-                context.startActivity(fallbackIntent)
+                // If Business was targeted and failed, fallback to regular WhatsApp, then browser
+                val fallbackIntent = Intent(Intent.ACTION_VIEW, uri).apply {
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    if (targetPackage == "com.whatsapp.w4b" && isPackageInstalled(context, "com.whatsapp")) {
+                        setPackage("com.whatsapp")
+                    }
+                }
+                try {
+                    context.startActivity(fallbackIntent)
+                } catch (e2: Exception) {
+                    val browserIntent = Intent(Intent.ACTION_VIEW, uri).apply {
+                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    }
+                    context.startActivity(browserIntent)
+                }
             }
         } catch (e: Exception) {
             Toast.makeText(context, "تعذر فتح تطبيق واتساب: ${e.localizedMessage}", Toast.LENGTH_SHORT).show()
@@ -341,7 +375,9 @@ object ClinicActions {
 
     fun makeCall(context: Context, rawPhone: String) {
         try {
-            val intent = Intent(Intent.ACTION_DIAL, Uri.parse("tel:$rawPhone"))
+            val intent = Intent(Intent.ACTION_DIAL, Uri.parse("tel:$rawPhone")).apply {
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
             context.startActivity(intent)
         } catch (e: Exception) {
             Toast.makeText(context, "تعذر فتح سجل الهاتف", Toast.LENGTH_SHORT).show()
