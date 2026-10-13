@@ -20,6 +20,46 @@ object TimeFormatter {
     }
 
     /**
+     * Parses any time representation (24-hour, 12-hour with AM/PM or ص/م, Arabic numerals, etc.)
+     * into total minutes from start of day (0..1439).
+     */
+    fun parseTimeToMinutes(timeStr: String): Int {
+        if (timeStr.isBlank()) return 0
+        try {
+            val normalized = normalizeArabicDigits(timeStr).trim()
+            val isPm = normalized.contains("م") || normalized.contains("pm", ignoreCase = true)
+            val isAm = normalized.contains("ص") || normalized.contains("am", ignoreCase = true)
+            val digitsOnly = normalized.replace(Regex("[^0-9:]"), "")
+            val parts = digitsOnly.split(":")
+            if (parts.isNotEmpty()) {
+                var hour = parts[0].toIntOrNull() ?: 0
+                val minute = if (parts.size > 1) parts[1].toIntOrNull() ?: 0 else 0
+
+                if (isPm && hour < 12) {
+                    hour += 12
+                } else if (isAm && hour == 12) {
+                    hour = 0
+                }
+                return (hour.coerceIn(0, 23) * 60) + minute.coerceIn(0, 59)
+            }
+        } catch (e: Exception) {
+            // fallback
+        }
+        return 0
+    }
+
+    /**
+     * Normalizes a time string into standard 24-hour HH:mm format (e.g. "09:30" or "16:00")
+     */
+    fun normalizeTime24(timeStr: String): String {
+        if (timeStr.isBlank()) return "10:00"
+        val totalMinutes = parseTimeToMinutes(timeStr)
+        val h = totalMinutes / 60
+        val m = totalMinutes % 60
+        return java.lang.String.format(java.util.Locale.US, "%02d:%02d", h, m)
+    }
+
+    /**
      * Converts a 24-hour time string like "09:00" or "14:30" or "21:00"
      * into a beautiful Arabic 12-hour format string like "09:00 ص" or "02:30 م".
      */

@@ -4,6 +4,7 @@ import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.widget.Toast
+import com.example.data.model.AppointmentEntity
 import java.time.DayOfWeek
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
@@ -89,10 +90,11 @@ object DateUtils {
 
     /**
      * Normalizes date strings: converts Arabic numerals to western, slashes to dashes,
-     * trims whitespace, and ensures 2-digit padding for month and day.
+     * strips invisible RTL/LTR/zero-width markers, trims whitespace, and ensures 2-digit padding.
      */
     fun normalizeDateString(dateStr: String): String {
         val clean = dateStr.trim()
+            .replace(Regex("[\\u200B-\\u200F\\u202A-\\u202E\\uFEFF]"), "")
             .replace('٠', '0')
             .replace('١', '1')
             .replace('٢', '2')
@@ -104,16 +106,38 @@ object DateUtils {
             .replace('٨', '8')
             .replace('٩', '9')
             .replace('/', '-')
+            .trim()
         val parts = clean.split("-")
         if (parts.size == 3) {
             val y = parts[0].toIntOrNull()
             val m = parts[1].toIntOrNull()
             val d = parts[2].toIntOrNull()
             if (y != null && m != null && d != null) {
-                return String.format("%04d-%02d-%02d", y, m, d)
+                return String.format(java.util.Locale.US, "%04d-%02d-%02d", y, m, d)
             }
         }
         return clean
+    }
+
+    /**
+     * Sorts appointments strictly chronologically:
+     * 1. Date ascending (earliest day to latest day)
+     * 2. Start Time ascending (earliest hour:min to latest hour:min)
+     * 3. End Time ascending
+     * 4. ID ascending (deterministic tie-breaker)
+     */
+    fun sortAppointmentsChronologically(list: List<AppointmentEntity>): List<AppointmentEntity> {
+        return list.sortedWith(
+            compareBy<AppointmentEntity> {
+                parseDate(it.dateStr)
+            }.thenBy {
+                TimeFormatter.parseTimeToMinutes(it.startTime)
+            }.thenBy {
+                TimeFormatter.parseTimeToMinutes(it.endTime)
+            }.thenBy {
+                it.id
+            }
+        )
     }
 
     fun parseDate(dateStr: String): LocalDate {

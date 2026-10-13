@@ -279,6 +279,7 @@ class ClinicViewModel(application: Application) : AndroidViewModel(application) 
 
     // Data streams from Room (Kept hot in memory for instantaneous rendering)
     val allAppointments: StateFlow<List<AppointmentEntity>> = repository.allAppointments
+        .map { DateUtils.sortAppointmentsChronologically(it) }
         .flowOn(Dispatchers.IO)
         .stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
 
@@ -572,7 +573,13 @@ class ClinicViewModel(application: Application) : AndroidViewModel(application) 
 
             val isNew = appointment.id == 0L
             val finalAppId = if (isNew) FirebaseSyncManager.generateUniqueId() else appointment.id
-            val finalSavedApp = appointment.copy(id = finalAppId, patientId = finalPatientId)
+            val finalSavedApp = appointment.copy(
+                id = finalAppId,
+                patientId = finalPatientId,
+                dateStr = DateUtils.normalizeDateString(appointment.dateStr),
+                startTime = TimeFormatter.normalizeTime24(appointment.startTime),
+                endTime = TimeFormatter.normalizeTime24(appointment.endTime)
+            )
 
             FirebaseSyncManager.markLocalUpdate("appointment", finalAppId)
             if (isNew) {
@@ -630,10 +637,13 @@ class ClinicViewModel(application: Application) : AndroidViewModel(application) 
         newEndTime: String
     ) {
         viewModelScope.launch(Dispatchers.IO) {
+            val cleanDate = DateUtils.normalizeDateString(newDate)
+            val cleanStart = TimeFormatter.normalizeTime24(newStartTime)
+            val cleanEnd = TimeFormatter.normalizeTime24(newEndTime)
             val updated = appointment.copy(
-                dateStr = newDate,
-                startTime = newStartTime,
-                endTime = newEndTime
+                dateStr = cleanDate,
+                startTime = cleanStart,
+                endTime = cleanEnd
             )
             FirebaseSyncManager.markLocalUpdate("appointment", updated.id)
             repository.updateAppointment(updated)

@@ -7,6 +7,8 @@ import com.example.data.model.*
 import com.example.data.repository.ClinicRepository
 import com.example.receiver.TodayAppointmentsWidgetProvider
 import com.example.utils.AppointmentAlarmScheduler
+import com.example.utils.DateUtils
+import com.example.utils.TimeFormatter
 import com.google.firebase.FirebaseApp
 import com.google.firebase.FirebaseOptions
 import com.google.firebase.firestore.*
@@ -677,9 +679,9 @@ object FirebaseSyncManager {
                                     val patientPhone = doc.safeString("patientPhone")
                                     val procedureName = doc.safeString("procedureName")
                                     val chairNumber = doc.safeInt("chairNumber") ?: 1
-                                    val dateStr = doc.safeString("dateStr")
-                                    val startTime = doc.safeString("startTime")
-                                    val endTime = doc.safeString("endTime")
+                                    val dateStr = DateUtils.normalizeDateString(doc.safeString("dateStr"))
+                                    val startTime = TimeFormatter.normalizeTime24(doc.safeString("startTime"))
+                                    val endTime = TimeFormatter.normalizeTime24(doc.safeString("endTime"))
                                     val price = doc.safeDouble("price") ?: 0.0
 
                                     val statusStr = doc.safeString("status", AppointmentStatus.UNCONFIRMED.name)
@@ -1200,9 +1202,9 @@ object FirebaseSyncManager {
                 val patientPhone = doc.safeString("patientPhone")
                 val procedureName = doc.safeString("procedureName")
                 val chairNumber = doc.safeInt("chairNumber") ?: 1
-                val dateStr = doc.safeString("dateStr")
-                val startTime = doc.safeString("startTime")
-                val endTime = doc.safeString("endTime")
+                val dateStr = DateUtils.normalizeDateString(doc.safeString("dateStr"))
+                val startTime = TimeFormatter.normalizeTime24(doc.safeString("startTime"))
+                val endTime = TimeFormatter.normalizeTime24(doc.safeString("endTime"))
                 val price = doc.safeDouble("price") ?: 0.0
                 val statusStr = doc.safeString("status", AppointmentStatus.UNCONFIRMED.name)
                 val status = try {

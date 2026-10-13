@@ -53,12 +53,15 @@ fun ReportsScreen(
     val context = LocalContext.current
     var selectedScope by remember { mutableStateOf(ReportScope.DAY) }
 
-    // Direct real-time calculations from latest appointments state:
-    val filteredAppointments = when (selectedScope) {
-        ReportScope.DAY -> appointments.filter { DateUtils.isSameDay(it.dateStr, selectedReportDate) }
-        ReportScope.WEEK -> appointments.filter { DateUtils.isSameWeek(it.dateStr, selectedReportDate) }
-        ReportScope.MONTH -> appointments.filter { DateUtils.isSameMonth(it.dateStr, selectedReportDate) }
-        ReportScope.ALL -> appointments
+    // Direct real-time calculations from latest appointments state (strictly sorted chronologically):
+    val filteredAppointments = remember(appointments, selectedScope, selectedReportDate) {
+        val filtered = when (selectedScope) {
+            ReportScope.DAY -> appointments.filter { DateUtils.isSameDay(it.dateStr, selectedReportDate) }
+            ReportScope.WEEK -> appointments.filter { DateUtils.isSameWeek(it.dateStr, selectedReportDate) }
+            ReportScope.MONTH -> appointments.filter { DateUtils.isSameMonth(it.dateStr, selectedReportDate) }
+            ReportScope.ALL -> appointments
+        }
+        DateUtils.sortAppointmentsChronologically(filtered)
     }
 
     // Active/valid appointments contributing to plan and expected revenue (strictly excluding cancelled & no-show)

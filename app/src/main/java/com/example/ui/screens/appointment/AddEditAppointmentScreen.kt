@@ -154,9 +154,9 @@ fun AddEditAppointmentScreen(
                             patientPhone = patientPhone.trim(),
                             procedureName = selectedProcedure,
                             chairNumber = 1, // Single chair clinic
-                            dateStr = dateText,
-                            startTime = startTime,
-                            endTime = endTime,
+                            dateStr = com.example.utils.DateUtils.normalizeDateString(dateText),
+                            startTime = com.example.utils.TimeFormatter.normalizeTime24(startTime),
+                            endTime = com.example.utils.TimeFormatter.normalizeTime24(endTime),
                             price = priceVal,
                             status = selectedStatus,
                             patientClassification = patientClassification,
